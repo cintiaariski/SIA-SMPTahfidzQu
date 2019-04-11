@@ -168,6 +168,8 @@
                     })
                     .addClass('highcharts-axis-title')
 
+                    .css(axisTitleOptions.style)
+
                     // Add to axisParent instead of axisGroup, to ignore the space
                     // it takes
                     .add(axisParent);

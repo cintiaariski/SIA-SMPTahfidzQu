@@ -1475,7 +1475,7 @@
                             shapeArgs = point.shapeArgs;
 
 
-                            pointAttr = point.series.colorAttribs(point);
+                            pointAttr = point.series.pointAttribs(point);
 
                             swidth = pointAttr['stroke-width'] || 0;
 
