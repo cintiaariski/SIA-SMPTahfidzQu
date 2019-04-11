@@ -2142,8 +2142,7 @@
 
             tooltip: {
 
-
-                pointFormat: '<span style="color:{point.color}">\u25CF</span> <b> {series.name}</b><br/>' + // eslint-disable-line max-len
+                pointFormat: '<span class="highcharts-color-{point.colorIndex}">\u25CF</span> <b> {series.name}</b><br/>' + // eslint-disable-line max-len
                     'Open: {point.open}<br/>' +
                     'High: {point.high}<br/>' +
                     'Low: {point.low}<br/>' +
@@ -2152,36 +2151,6 @@
             },
 
             threshold: null,
-
-
-            states: {
-
-                /**
-                 * @extends plotOptions.column.states.hover
-                 * @product highstock
-                 */
-                hover: {
-
-                    /**
-                     * The pixel width of the line representing the OHLC point.
-                     * 
-                     * @type {Number}
-                     * @default 3
-                     * @product highstock
-                     */
-                    lineWidth: 3
-                }
-            },
-
-
-            /**
-             * Line color for up points.
-             * 
-             * @type {Color}
-             * @product highstock
-             * @apioption plotOptions.ohlc.upColor
-             */
-
 
 
             stickyTracking: true
@@ -2194,34 +2163,6 @@
             },
             pointValKey: 'close',
 
-
-            pointAttrToOptions: {
-                'stroke': 'color',
-                'stroke-width': 'lineWidth'
-            },
-
-            /**
-             * Postprocess mapping between options and SVG attributes
-             */
-            pointAttribs: function(point, state) {
-                var attribs = seriesTypes.column.prototype.pointAttribs.call(
-                        this,
-                        point,
-                        state
-                    ),
-                    options = this.options;
-
-                delete attribs.fill;
-
-                if (!point.options.color &&
-                    options.upColor &&
-                    point.open < point.close
-                ) {
-                    attribs.stroke = options.upColor;
-                }
-
-                return attribs;
-            },
 
 
             /**
@@ -2288,10 +2229,6 @@
                                 .add(series.group);
                         }
 
-
-                        graphic.attr(
-                            series.pointAttribs(point, point.selected && 'select')
-                        ); // #3897
 
 
                         // crisp vector coordinates
@@ -2503,63 +2440,6 @@
 
 
             /**
-             * The color of the line/border of the candlestick.
-             * 
-             * In styled mode, the line stroke can be set with the `.highcharts-
-             * candlestick-series .highcahrts-point` rule.
-             * 
-             * @type {Color}
-             * @see [upLineColor](#plotOptions.candlestick.upLineColor)
-             * @sample {highstock} stock/plotoptions/candlestick-linecolor/
-             *         Candlestick line colors
-             * @default #000000
-             * @product highstock
-             */
-            lineColor: '#000000',
-
-            /**
-             * The pixel width of the candlestick line/border. Defaults to `1`.
-             * 
-             * 
-             * In styled mode, the line stroke width can be set with the `.
-             * highcharts-candlestick-series .highcahrts-point` rule.
-             * 
-             * @type {Number}
-             * @default 1
-             * @product highstock
-             */
-            lineWidth: 1,
-
-            /**
-             * The fill color of the candlestick when values are rising.
-             * 
-             * In styled mode, the up color can be set with the `.highcharts-
-             * candlestick-series .highcharts-point-up` rule.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/plotoptions/candlestick-color/ Custom colors
-             * @sample {highstock} highcharts/css/candlestick/ Colors in styled mode
-             * @default #ffffff
-             * @product highstock
-             */
-            upColor: '#ffffff',
-
-            stickyTracking: true
-
-            /**
-             * The specific line color for up candle sticks. The default is to inherit
-             * the general `lineColor` setting.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/plotoptions/candlestick-linecolor/ Candlestick line colors
-             * @default null
-             * @since 1.3.6
-             * @product highstock
-             * @apioption plotOptions.candlestick.upLineColor
-             */
-
-
-            /**
              * @default ohlc
              * @apioption plotOptions.candlestick.dataGrouping.approximation
              */
@@ -2576,34 +2456,6 @@
             defaultPlotOptions.column,
             candlestickOptions
         ), /** @lends seriesTypes.candlestick */ {
-
-            /**
-             * Postprocess mapping between options and SVG attributes
-             */
-            pointAttribs: function(point, state) {
-                var attribs = seriesTypes.column.prototype.pointAttribs.call(this, point, state),
-                    options = this.options,
-                    isUp = point.open < point.close,
-                    stroke = options.lineColor || this.color,
-                    stateOptions;
-
-                attribs['stroke-width'] = options.lineWidth;
-
-                attribs.fill = point.options.color || (isUp ? (options.upColor || this.color) : this.color);
-                attribs.stroke = point.lineColor || (isUp ? (options.upLineColor || stroke) : stroke);
-
-                // Select or hover states
-                if (state) {
-                    stateOptions = options.states[state];
-                    attribs.fill = stateOptions.color || attribs.fill;
-                    attribs.stroke = stateOptions.lineColor || attribs.stroke;
-                    attribs['stroke-width'] =
-                        stateOptions.lineWidth || attribs['stroke-width'];
-                }
-
-
-                return attribs;
-            },
 
             /**
              * Draw the data points
@@ -2636,10 +2488,6 @@
                                 .add(series.group);
                         }
 
-
-                        graphic
-                            .attr(series.pointAttribs(point, point.selected && 'select')) // #3897
-                            .shadow(series.options.shadow);
 
 
                         // Crisp vector coordinates
@@ -3038,76 +2886,6 @@
 
 
 
-            /**
-             * The fill color for the flags.
-             */
-            fillColor: '#ffffff',
-
-            /**
-             * The color of the line/border of the flag.
-             * 
-             * In styled mode, the stroke is set in the `.highcharts-flag-series
-             * .highcharts-point` rule.
-             * 
-             * @type {Color}
-             * @default #000000
-             * @product highstock
-             * @apioption plotOptions.flags.lineColor
-             */
-
-            /**
-             * The pixel width of the flag's line/border.
-             * 
-             * @type {Number}
-             * @default 1
-             * @product highstock
-             */
-            lineWidth: 1,
-
-            states: {
-
-                /**
-                 * @extends plotOptions.column.states.hover
-                 * @product highstock
-                 */
-                hover: {
-
-                    /**
-                     * The color of the line/border of the flag.
-                     * 
-                     * @type {String}
-                     * @default "black"
-                     * @product highstock
-                     */
-                    lineColor: '#000000',
-
-                    /**
-                     * The fill or background color of the flag.
-                     * 
-                     * @type {String}
-                     * @default "#FCFFC5"
-                     * @product highstock
-                     */
-                    fillColor: '#ccd6eb'
-                }
-            },
-
-            /**
-             * The text styles of the flag.
-             * 
-             * In styled mode, the styles are set in the `.highcharts-flag-
-             * series .highcharts-point` rule.
-             * 
-             * @type {CSSObject}
-             * @default { "fontSize": "11px", "fontWeight": "bold" }
-             * @product highstock
-             */
-            style: {
-                fontSize: '11px',
-                fontWeight: 'bold'
-            }
-
-
         }, /** @lends seriesTypes.flags.prototype */ {
             sorted: false,
             noSharedTooltip: true,
@@ -3120,29 +2898,6 @@
              */
             init: Series.prototype.init,
 
-
-            /**
-             * Get presentational attributes
-             */
-            pointAttribs: function(point, state) {
-                var options = this.options,
-                    color = (point && point.color) || this.color,
-                    lineColor = options.lineColor,
-                    lineWidth = (point && point.lineWidth),
-                    fill = (point && point.fillColor) || options.fillColor;
-
-                if (state) {
-                    fill = options.states[state].fillColor;
-                    lineColor = options.states[state].lineColor;
-                    lineWidth = options.states[state].lineWidth;
-                }
-
-                return {
-                    'fill': fill || color,
-                    'stroke': lineColor || color,
-                    'stroke-width': lineWidth || options.lineWidth || 0
-                };
-            },
 
 
             translate: onSeriesMixin.translate,
@@ -3201,9 +2956,6 @@
                                     options.useHTML
                                 )
 
-                                .attr(series.pointAttribs(point))
-                                .css(merge(options.style, point.style))
-
                                 .attr({
                                     align: shape === 'flag' ? 'left' : 'center',
                                     width: options.width,
@@ -3218,8 +2970,6 @@
                                 point.graphic.div.point = point;
                             }
 
-
-                            graphic.shadow(options.shadow);
 
                         }
 
@@ -3345,15 +3095,6 @@
             };
         });
 
-
-        // The symbol callbacks are generated on the SVGRenderer object in all browsers. Even
-        // VML browsers need this in order to generate shapes in export. Now share
-        // them with the VMLRenderer.
-        if (Renderer === VMLRenderer) {
-            each(['flag', 'circlepin', 'squarepin'], function(shape) {
-                VMLRenderer.prototype.symbols[shape] = symbols[shape];
-            });
-        }
 
 
         /**
@@ -3526,116 +3267,7 @@
             /**
              * The z index of the scrollbar group.
              */
-            zIndex: 3,
-
-
-            /**
-             * The background color of the scrollbar itself.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #cccccc
-             * @product highstock
-             */
-            barBackgroundColor: '#cccccc',
-
-            /**
-             * The width of the bar's border.
-             * 
-             * @type {Number}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default 1
-             * @product highstock
-             */
-            barBorderWidth: 1,
-
-            /**
-             * The color of the scrollbar's border.
-             * 
-             * @type {Color}
-             * @default #cccccc
-             * @product highstock
-             */
-            barBorderColor: '#cccccc',
-
-            /**
-             * The color of the small arrow inside the scrollbar buttons.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #333333
-             * @product highstock
-             */
-            buttonArrowColor: '#333333',
-
-            /**
-             * The color of scrollbar buttons.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #e6e6e6
-             * @product highstock
-             */
-            buttonBackgroundColor: '#e6e6e6',
-
-            /**
-             * The color of the border of the scrollbar buttons.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #cccccc
-             * @product highstock
-             */
-            buttonBorderColor: '#cccccc',
-
-            /**
-             * The border width of the scrollbar buttons.
-             * 
-             * @type {Number}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default 1
-             * @product highstock
-             */
-            buttonBorderWidth: 1,
-
-            /**
-             * The color of the small rifles in the middle of the scrollbar.
-             * 
-             * @type {Color}
-             * @default #333333
-             * @product highstock
-             */
-            rifleColor: '#333333',
-
-            /**
-             * The color of the track background.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #f2f2f2
-             * @product highstock
-             */
-            trackBackgroundColor: '#f2f2f2',
-
-            /**
-             * The color of the border of the scrollbar track.
-             * 
-             * @type {Color}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default #f2f2f2
-             * @product highstock
-             */
-            trackBorderColor: '#f2f2f2',
-
-            /**
-             * The width of the border of the scrollbar track.
-             * 
-             * @type {Number}
-             * @sample {highstock} stock/scrollbar/style/ Scrollbar styling
-             * @default 1
-             * @product highstock
-             */
-            trackBorderWidth: 1
+            zIndex: 3
 
         };
 
@@ -3726,12 +3358,6 @@
                     }).add(group);
 
 
-                scroller.track.attr({
-                    fill: options.trackBackgroundColor,
-                    stroke: options.trackBorderColor,
-                    'stroke-width': options.trackBorderWidth
-                });
-
                 this.trackBorderWidth = scroller.track.strokeWidth();
                 scroller.track.attr({
                     y: -this.trackBorderWidth % 2 / 2
@@ -3765,16 +3391,6 @@
                     .addClass('highcharts-scrollbar-rifles')
                     .add(scroller.scrollbarGroup);
 
-
-                scroller.scrollbar.attr({
-                    fill: options.barBackgroundColor,
-                    stroke: options.barBorderColor,
-                    'stroke-width': options.barBorderWidth
-                });
-                scroller.scrollbarRifles.attr({
-                    stroke: options.rifleColor,
-                    'stroke-width': 1
-                });
 
                 scroller.scrollbarStrokeWidth = scroller.scrollbar.strokeWidth();
                 scroller.scrollbarGroup.translate(-scroller.scrollbarStrokeWidth % 2 / 2, -scroller.scrollbarStrokeWidth % 2 / 2);
@@ -3859,13 +3475,6 @@
                     .add(group);
 
 
-                // Presentational attributes
-                tempElem.attr({
-                    stroke: options.buttonBorderColor,
-                    'stroke-width': options.buttonBorderWidth,
-                    fill: options.buttonBackgroundColor
-                });
-
 
                 // Place the rectangle based on the rendered stroke width
                 tempElem.attr(tempElem.crisp({
@@ -3892,10 +3501,6 @@
                     .addClass('highcharts-scrollbar-arrow')
                     .add(scrollbarButtons[index]);
 
-
-                tempElem.attr({
-                    fill: options.buttonArrowColor
-                });
 
             },
 
@@ -4537,81 +4142,11 @@
                      * @product highstock
                      * @since 6.0.0
                      */
-                    enabled: true,
-
-
-                    /**
-                     * The width for the handle border and the stripes inside.
-                     *
-                     * @type {Number}
-                     * @default 7
-                     * @product highstock
-                     * @sample {highstock} stock/navigator/styled-handles/
-                     *         Styled handles
-                     * @since 6.0.0
-                     */
-                    lineWidth: 1,
-
-                    /**
-                     * The fill for the handle.
-                     *
-                     * @type {Color}
-                     * @product highstock
-                     */
-                    backgroundColor: '#f2f2f2',
-
-                    /**
-                     * The stroke for the handle border and the stripes inside.
-                     *
-                     * @type {Color}
-                     * @product highstock
-                     */
-                    borderColor: '#999999'
+                    enabled: true
 
 
                 },
 
-
-
-                /**
-                 * The color of the mask covering the areas of the navigator series
-                 * that are currently not visible in the main series. The default
-                 * color is bluish with an opacity of 0.3 to see the series below.
-                 *
-                 * @type {Color}
-                 * @see     In styled mode, the mask is styled with the
-                 *          `.highcharts-navigator-mask` and
-                 *          `.highcharts-navigator-mask-inside` classes.
-                 * @sample  {highstock} stock/navigator/maskfill/
-                 *          Blue, semi transparent mask
-                 * @default rgba(102,133,194,0.3)
-                 * @product highstock
-                 */
-                maskFill: color('#6685c2').setOpacity(0.3).get(),
-
-                /**
-                 * The color of the line marking the currently zoomed area in the
-                 * navigator.
-                 *
-                 * @type {Color}
-                 * @sample {highstock} stock/navigator/outline/ 2px blue outline
-                 * @default #cccccc
-                 * @product highstock
-                 */
-                outlineColor: '#cccccc',
-
-                /**
-                 * The width of the line marking the currently zoomed area in the
-                 * navigator.
-                 *
-                 * @type {Number}
-                 * @see In styled mode, the outline stroke width is set with the `.
-                 * highcharts-navigator-outline` class.
-                 * @sample {highstock} stock/navigator/outline/ 2px blue outline
-                 * @default 2
-                 * @product highstock
-                 */
-                outlineWidth: 1,
 
 
                 /**
@@ -4654,18 +4189,6 @@
                      * @type {String}
                      */
                     type: defaultSeriesType,
-
-
-
-                    /**
-                     * The fill opacity of the navigator series.
-                     */
-                    fillOpacity: 0.05,
-
-                    /**
-                     * The pixel line width of the navigator series.
-                     */
-                    lineWidth: 1,
 
 
                     /**
@@ -4764,20 +4287,12 @@
                     tickLength: 0,
 
 
-                    lineWidth: 0,
-                    gridLineColor: '#e6e6e6',
-                    gridLineWidth: 1,
-
 
                     tickPixelInterval: 200,
 
                     labels: {
                         align: 'left',
 
-
-                        style: {
-                            color: '#999999'
-                        },
 
 
                         x: 3,
@@ -4816,8 +4331,6 @@
 
                     className: 'highcharts-navigator-yaxis',
 
-
-                    gridLineWidth: 0,
 
 
                     startOnTick: false,
@@ -5070,10 +4583,6 @@
 
 
 
-                var mouseCursor = {
-                    cursor: inverted ? 'ns-resize' : 'ew-resize'
-                };
-
 
                 // Create masks, each mask will get events and fill:
                 each([!maskInside, maskInside, !maskInside], function(hasMask, index) {
@@ -5081,22 +4590,12 @@
                         .addClass('highcharts-navigator-mask' +
                             (index === 1 ? '-inside' : '-outside'))
 
-                        .attr({
-                            fill: hasMask ? navigatorOptions.maskFill : 'rgba(0,0,0,0)'
-                        })
-                        .css(index === 1 && mouseCursor)
-
                         .add(navigatorGroup);
                 });
 
                 // Create the outline:
                 navigator.outline = renderer.path()
                     .addClass('highcharts-navigator-outline')
-
-                    .attr({
-                        'stroke-width': navigatorOptions.outlineWidth,
-                        stroke: navigatorOptions.outlineColor
-                    })
 
                     .add(navigatorGroup);
 
@@ -5121,15 +4620,6 @@
                                 'highcharts-navigator-handle-' + ['left', 'right'][index]
                             ).add(navigatorGroup);
 
-
-                        var handlesOptions = navigatorOptions.handles;
-                        navigator.handles[index]
-                            .attr({
-                                fill: handlesOptions.backgroundColor,
-                                stroke: handlesOptions.borderColor,
-                                'stroke-width': handlesOptions.lineWidth
-                            })
-                            .css(mouseCursor);
 
                     });
                 }
@@ -6690,22 +6180,7 @@
                 // inputDateFormat: '%b %e, %Y',
                 // inputEditDateFormat: '%Y-%m-%d',
                 // inputEnabled: true,
-                // selected: undefined,
-
-                // inputStyle: {},
-
-                /**
-                 * CSS styles for the labels - the Zoom, From and To texts.
-                 * 
-                 * In styled mode, the labels are styled by the `.highcharts-range-label` class.
-                 * 
-                 * @type {CSSObject}
-                 * @sample {highstock} stock/rangeselector/styling/ Styling the buttons and inputs
-                 * @product highstock
-                 */
-                labelStyle: {
-                    color: '#666666'
-                }
+                // selected: undefined
 
             }
         });
@@ -7275,25 +6750,6 @@
                     top: chart.plotTop + 'px' // prevent jump on focus in Firefox
                 }, div);
 
-
-                // Styles
-                label.css(merge(chartStyle, options.labelStyle));
-
-                dateBox.css(merge({
-                    color: '#333333'
-                }, chartStyle, options.inputStyle));
-
-                css(input, extend({
-                    position: 'absolute',
-                    border: 0,
-                    width: '1px', // Chrome needs a pixel to see it
-                    height: '1px',
-                    padding: 0,
-                    textAlign: 'center',
-                    fontSize: chartStyle.fontSize,
-                    fontFamily: chartStyle.fontFamily,
-                    left: '-9em' // #4798
-                }, options.inputStyle));
 
 
                 // Blow up the input box
@@ -8446,10 +7902,6 @@
             return points;
         };
 
-        if (Renderer === VMLRenderer) {
-            VMLRenderer.prototype.crispPolyLine = SVGRenderer.prototype.crispPolyLine;
-        }
-
 
         // Wrapper to hide the label
         wrap(Axis.prototype, 'hideCrosshair', function(proceed, i) {
@@ -8513,21 +7965,6 @@
                     })
                     .add(this.labelGroup);
 
-
-                // Presentational
-                crossLabel
-                    .attr({
-                        fill: options.backgroundColor ||
-                            (this.series[0] && this.series[0].color) || '#666666',
-                        stroke: options.borderColor || '',
-                        'stroke-width': options.borderWidth || 0
-                    })
-                    .css(extend({
-                        color: '#ffffff',
-                        fontWeight: 'normal',
-                        fontSize: '11px',
-                        textAlign: 'center'
-                    }, options.style));
 
             }
 

@@ -327,17 +327,6 @@
                             .add(series.group);
 
 
-                        if (options.linecap !== 'square') {
-                            point.graphic.attr({
-                                'stroke-linecap': 'round',
-                                'stroke-linejoin': 'round'
-                            });
-                        }
-                        point.graphic.attr({
-                            stroke: options.borderColor || 'none',
-                            'stroke-width': options.borderWidth || 0
-                        });
-
                     }
                 });
             },

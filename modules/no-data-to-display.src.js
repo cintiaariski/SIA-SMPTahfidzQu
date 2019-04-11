@@ -125,17 +125,6 @@
         };
 
 
-        // Presentational
-        /**
-         * CSS styles for the no-data label.
-         * @optionparent noData.style
-         */
-        defaultOptions.noData.style = {
-            fontWeight: 'bold',
-            fontSize: '12px',
-            color: '#666666'
-        };
-
 
 
         // Define hasData function for non-cartesian seris. Returns true if the series
@@ -188,10 +177,6 @@
                         'no-data'
                     );
 
-
-                chart.noDataLabel
-                    .attr(noDataOptions.attr)
-                    .css(noDataOptions.style);
 
 
                 chart.noDataLabel.add();
