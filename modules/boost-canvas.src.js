@@ -136,7 +136,7 @@
                                 shapeArgs = point.shapeArgs;
 
 
-                                pointAttr = point.series.pointAttribs(point);
+                                pointAttr = point.series.colorAttribs(point);
 
 
                                 ctx.fillStyle = pointAttr.fill;

@@ -220,6 +220,43 @@
         }
 
 
+        /**
+         * Override the SVGRenderer initiator to add definitions used by brighter and
+         * darker faces of the cuboids.
+         */
+        wrap(SVGRenderer.prototype, 'init', function(proceed) {
+            proceed.apply(this, [].slice.call(arguments, 1));
+
+            each([{
+                name: 'darker',
+                slope: 0.6
+            }, {
+                name: 'brighter',
+                slope: 1.4
+            }], function(cfg) {
+                this.definition({
+                    tagName: 'filter',
+                    id: 'highcharts-' + cfg.name,
+                    children: [{
+                        tagName: 'feComponentTransfer',
+                        children: [{
+                            tagName: 'feFuncR',
+                            type: 'linear',
+                            slope: cfg.slope
+                        }, {
+                            tagName: 'feFuncG',
+                            type: 'linear',
+                            slope: cfg.slope
+                        }, {
+                            tagName: 'feFuncB',
+                            type: 'linear',
+                            slope: cfg.slope
+                        }]
+                    }]
+                });
+            }, this);
+        });
+
 
         SVGRenderer.prototype.toLinePath = function(points, closed) {
             var result = [];
@@ -324,10 +361,6 @@
                 destroy = result.destroy;
 
 
-            result.attr({
-                'stroke-linejoin': 'round'
-            });
-
 
             result.faces = [];
 
@@ -382,10 +415,6 @@
                 destroy = result.destroy,
                 paths = this.cuboidPath(shapeArgs);
 
-
-            result.attr({
-                'stroke-linejoin': 'round'
-            });
 
 
             // create the 3 sides
@@ -1417,6 +1446,24 @@
 
         merge(true, defaultOptions, extendedOptions);
 
+
+        /**
+         * Override the getContainer by adding the required CSS classes for column 
+         * sides (#6018)
+         */
+        wrap(Chart.prototype, 'getContainer', function(proceed) {
+            proceed.apply(this, [].slice.call(arguments, 1));
+
+            this.renderer.definition({
+                tagName: 'style',
+                textContent: '.highcharts-3d-top{' +
+                    'filter: url(#highcharts-brighter)' +
+                    '}\n' +
+                    '.highcharts-3d-side{' +
+                    'filter: url(#highcharts-darker)' +
+                    '}\n'
+            });
+        });
 
 
         wrap(Chart.prototype, 'setClassName', function(proceed) {
@@ -3902,25 +3949,6 @@
         });
 
 
-        function pointAttribs(proceed) {
-            var attr = proceed.apply(this, [].slice.call(arguments, 1));
-
-            if (this.chart.is3d()) {
-                // Set the fill color to the fill color to provide a smooth edge
-                attr.stroke = this.options.edgeColor || attr.fill;
-                attr['stroke-width'] = pick(this.options.edgeWidth, 1); // #4055
-            }
-
-            return attr;
-        }
-
-        wrap(seriesTypes.column.prototype, 'pointAttribs', pointAttribs);
-        if (seriesTypes.columnrange) {
-            wrap(seriesTypes.columnrange.prototype, 'pointAttribs', pointAttribs);
-            seriesTypes.columnrange.prototype.plotGroup = seriesTypes.column.prototype.plotGroup;
-            seriesTypes.columnrange.prototype.setVisible = seriesTypes.column.prototype.setVisible;
-        }
-
 
         wrap(Series.prototype, 'alignDataLabel', function(proceed) {
 
@@ -4090,18 +4118,6 @@
             return this.series.chart.is3d() ? [] : proceed.call(this, args[1]);
         });
 
-
-        wrap(seriesTypes.pie.prototype, 'pointAttribs', function(proceed, point, state) {
-            var attr = proceed.call(this, point, state),
-                options = this.options;
-
-            if (this.chart.is3d()) {
-                attr.stroke = options.edgeColor || point.color || this.color;
-                attr['stroke-width'] = pick(options.edgeWidth, 1);
-            }
-
-            return attr;
-        });
 
 
         wrap(seriesTypes.pie.prototype, 'drawPoints', function(proceed) {
@@ -4356,71 +4372,6 @@
          *
          * License: www.highcharts.com/license
          */
-
-        var Axis = H.Axis,
-            SVGRenderer = H.SVGRenderer,
-            VMLRenderer = H.VMLRenderer;
-
-        /**
-         *	Extension to the VML Renderer
-         */
-        if (VMLRenderer) {
-
-            H.setOptions({
-                animate: false
-            });
-
-            VMLRenderer.prototype.face3d = SVGRenderer.prototype.face3d;
-            VMLRenderer.prototype.polyhedron = SVGRenderer.prototype.polyhedron;
-            VMLRenderer.prototype.cuboid = SVGRenderer.prototype.cuboid;
-            VMLRenderer.prototype.cuboidPath = SVGRenderer.prototype.cuboidPath;
-
-            VMLRenderer.prototype.toLinePath = SVGRenderer.prototype.toLinePath;
-            VMLRenderer.prototype.toLineSegments = SVGRenderer.prototype.toLineSegments;
-
-            VMLRenderer.prototype.createElement3D =
-                SVGRenderer.prototype.createElement3D;
-
-            VMLRenderer.prototype.arc3d = function(shapeArgs) {
-                var result = SVGRenderer.prototype.arc3d.call(this, shapeArgs);
-                result.css({
-                    zIndex: result.zIndex
-                });
-                return result;
-            };
-
-            H.VMLRenderer.prototype.arc3dPath = H.SVGRenderer.prototype.arc3dPath;
-
-            H.wrap(Axis.prototype, 'render', function(proceed) {
-                proceed.apply(this, [].slice.call(arguments, 1));
-                // VML doesn't support a negative z-index
-                if (this.sideFrame) {
-                    this.sideFrame.css({
-                        zIndex: 0
-                    });
-                    this.sideFrame.front.attr({
-                        fill: this.sideFrame.color
-                    });
-                }
-                if (this.bottomFrame) {
-                    this.bottomFrame.css({
-                        zIndex: 1
-                    });
-                    this.bottomFrame.front.attr({
-                        fill: this.bottomFrame.color
-                    });
-                }
-                if (this.backFrame) {
-                    this.backFrame.css({
-                        zIndex: 0
-                    });
-                    this.backFrame.front.attr({
-                        fill: this.backFrame.color
-                    });
-                }
-            });
-
-        }
 
 
     }(Highcharts));

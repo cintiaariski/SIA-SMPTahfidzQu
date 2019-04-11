@@ -2914,15 +2914,6 @@
                             setter.call(this, val, key, element);
 
 
-                            // Let the shadow follow the main element
-                            if (
-                                this.shadows &&
-                                /^(width|height|visibility|x|y|d|transform|cx|cy|r)$/
-                                .test(key)
-                            ) {
-                                this.updateShadows(key, val, setter);
-                            }
-
                         }
                     }, this);
 
@@ -2954,32 +2945,6 @@
                 }
             },
 
-
-            /**
-             * Update the shadow elements with new attributes.
-             *
-             * @private
-             * @param {String} key - The attribute name.
-             * @param {String|Number} value - The value of the attribute.
-             * @param {Function} setter - The setter function, inherited from the
-             *   parent wrapper
-             * 
-             */
-            updateShadows: function(key, value, setter) {
-                var shadows = this.shadows,
-                    i = shadows.length;
-
-                while (i--) {
-                    setter.call(
-                        shadows[i],
-                        key === 'height' ?
-                        Math.max(value - (shadows[i].cutHeight || 0), 0) :
-                        key === 'd' ? this.d : value,
-                        key,
-                        shadows[i]
-                    );
-                }
-            },
 
 
             /**
@@ -3236,15 +3201,58 @@
 
 
             /**
-             * Get the current stroke width. In classic mode, the setter registers it 
-             * directly on the element.
-             * @returns {number} The stroke width in pixels.
-             * @ignore
+             * Get the computed style. Only in styled mode.
+             * @param {string} prop - The property name to check for.
+             * @returns {string} The current computed value.
+             * @example
+             * chart.series[0].points[0].graphic.getStyle('stroke-width'); // => '1px'
              */
-            strokeWidth: function() {
-                return this['stroke-width'] || 0;
+            getStyle: function(prop) {
+                return win.getComputedStyle(this.element || this, '')
+                    .getPropertyValue(prop);
             },
 
+            /**
+             * Get the computed stroke width in pixel values. This is used extensively
+             * when drawing shapes to ensure the shapes are rendered crisp and
+             * positioned correctly relative to each other. Using `shape-rendering: 
+             * crispEdges` leaves us less control over positioning, for example when we
+             * want to stack columns next to each other, or position things 
+             * pixel-perfectly within the plot box.
+             *
+             * The common pattern when placing a shape is:
+             * * Create the SVGElement and add it to the DOM. In styled mode, it will
+             *   now receive a stroke width from the style sheet. In classic mode we
+             *   will add the `stroke-width` attribute.
+             * * Read the computed `elem.strokeWidth()`.
+             * * Place it based on the stroke width.
+             *
+             * @returns {Number} The stroke width in pixels. Even if the given stroke
+             * widtch (in CSS or by attributes) is based on `em` or other units, the 
+             * pixel size is returned.
+             */
+            strokeWidth: function() {
+                var val = this.getStyle('stroke-width'),
+                    ret,
+                    dummy;
+
+                // Read pixel values directly
+                if (val.indexOf('px') === val.length - 2) {
+                    ret = pInt(val);
+
+                    // Other values like em, pt etc need to be measured
+                } else {
+                    dummy = doc.createElementNS(SVG_NS, 'rect');
+                    attr(dummy, {
+                        'width': val,
+                        'stroke-width': 0
+                    });
+                    this.element.parentNode.appendChild(dummy);
+                    ret = dummy.getBBox().width;
+                    dummy.parentNode.removeChild(dummy);
+                }
+                return ret;
+            },
 
             /**
              * Add an event listener. This is a simple setter that replaces all other
@@ -3552,7 +3560,8 @@
                 rad = rotation * deg2rad;
 
 
-                fontSize = styles && styles.fontSize;
+                fontSize = element &&
+                    SVGElement.prototype.getStyle.call(element, 'font-size');
 
 
                 if (textStr !== undefined) {
@@ -3855,8 +3864,6 @@
                 wrapper.safeRemoveChild(element);
 
 
-                wrapper.destroyShadows();
-
 
                 // In case of useHTML, clean up empty containers emulating SVG groups
                 // (#1960, #2393, #2697).
@@ -3881,106 +3888,6 @@
                 });
 
                 return null;
-            },
-
-
-            /**
-             * @typedef {Object} ShadowOptions
-             * @property {string} [color=#000000] The shadow color.
-             * @property {number} [offsetX=1] The horizontal offset from the element.
-             * @property {number} [offsetY=1] The vertical offset from the element.
-             * @property {number} [opacity=0.15] The shadow opacity.
-             * @property {number} [width=3] The shadow width or distance from the
-             *    element.
-             */
-            /**
-             * Add a shadow to the element. Must be called after the element is added to
-             * the DOM. In styled mode, this method is not used, instead use `defs` and
-             * filters.
-             * 
-             * @param {boolean|ShadowOptions} shadowOptions The shadow options. If
-             *    `true`, the default options are applied. If `false`, the current
-             *    shadow will be removed.
-             * @param {SVGElement} [group] The SVG group element where the shadows will 
-             *    be applied. The default is to add it to the same parent as the current
-             *    element. Internally, this is ised for pie slices, where all the
-             *    shadows are added to an element behind all the slices.
-             * @param {boolean} [cutOff] Used internally for column shadows.
-             *
-             * @returns {SVGElement} Returns the SVGElement for chaining.
-             *
-             * @example
-             * renderer.rect(10, 100, 100, 100)
-             *     .attr({ fill: 'red' })
-             *     .shadow(true);
-             */
-            shadow: function(shadowOptions, group, cutOff) {
-                var shadows = [],
-                    i,
-                    shadow,
-                    element = this.element,
-                    strokeWidth,
-                    shadowWidth,
-                    shadowElementOpacity,
-
-                    // compensate for inverted plot area
-                    transform;
-
-                if (!shadowOptions) {
-                    this.destroyShadows();
-
-                } else if (!this.shadows) {
-                    shadowWidth = pick(shadowOptions.width, 3);
-                    shadowElementOpacity = (shadowOptions.opacity || 0.15) /
-                        shadowWidth;
-                    transform = this.parentInverted ?
-                        '(-1,-1)' :
-                        '(' + pick(shadowOptions.offsetX, 1) + ', ' +
-                        pick(shadowOptions.offsetY, 1) + ')';
-                    for (i = 1; i <= shadowWidth; i++) {
-                        shadow = element.cloneNode(0);
-                        strokeWidth = (shadowWidth * 2) + 1 - (2 * i);
-                        attr(shadow, {
-                            'isShadow': 'true',
-                            'stroke': shadowOptions.color || '#000000',
-                            'stroke-opacity': shadowElementOpacity * i,
-                            'stroke-width': strokeWidth,
-                            'transform': 'translate' + transform,
-                            'fill': 'none'
-                        });
-                        if (cutOff) {
-                            attr(
-                                shadow,
-                                'height',
-                                Math.max(attr(shadow, 'height') - strokeWidth, 0)
-                            );
-                            shadow.cutHeight = strokeWidth;
-                        }
-
-                        if (group) {
-                            group.element.appendChild(shadow);
-                        } else if (element.parentNode) {
-                            element.parentNode.insertBefore(shadow, element);
-                        }
-
-                        shadows.push(shadow);
-                    }
-
-                    this.shadows = shadows;
-                }
-                return this;
-
-            },
-
-            /**
-             * Destroy shadows on the element.
-             * @private
-             */
-            destroyShadows: function() {
-                each(this.shadows || [], function(shadow) {
-                    this.safeRemoveChild(shadow);
-                }, this);
-                this.shadows = undefined;
             },
 
 
@@ -4034,38 +3941,6 @@
                     this[key] = value;
                 }
 
-            },
-
-            dashstyleSetter: function(value) {
-                var i,
-                    strokeWidth = this['stroke-width'];
-
-                // If "inherit", like maps in IE, assume 1 (#4981). With HC5 and the new
-                // strokeWidth function, we should be able to use that instead.
-                if (strokeWidth === 'inherit') {
-                    strokeWidth = 1;
-                }
-                value = value && value.toLowerCase();
-                if (value) {
-                    value = value
-                        .replace('shortdashdotdot', '3,1,1,1,1,1,')
-                        .replace('shortdashdot', '3,1,1,1')
-                        .replace('shortdot', '1,1,')
-                        .replace('shortdash', '3,1,')
-                        .replace('longdash', '8,3,')
-                        .replace(/dot/g, '1,3,')
-                        .replace('dash', '4,3,')
-                        .replace(/,$/, '')
-                        .split(','); // ending comma
-
-                    i = value.length;
-                    while (i--) {
-                        value[i] = pInt(value[i]) * strokeWidth;
-                    }
-                    value = value.join(',')
-                        .replace(/NaN/g, 'none'); // #3226
-                    this.element.setAttribute('stroke-dasharray', value);
-                }
             },
 
             alignSetter: function(value) {
@@ -4225,30 +4100,6 @@
             };
 
 
-        // WebKit and Batik have problems with a stroke-width of zero, so in this case
-        // we remove the stroke attribute altogether. #1270, #1369, #3065, #3072.
-        SVGElement.prototype['stroke-widthSetter'] =
-            SVGElement.prototype.strokeSetter = function(value, key, element) {
-                this[key] = value;
-                // Only apply the stroke attribute if the stroke width is defined and larger
-                // than 0
-                if (this.stroke && this['stroke-width']) {
-                    // Use prototype as instance may be overridden
-                    SVGElement.prototype.fillSetter.call(
-                        this,
-                        this.stroke,
-                        'stroke',
-                        element
-                    );
-
-                    element.setAttribute('stroke-width', this['stroke-width']);
-                    this.hasStroke = true;
-                } else if (key === 'stroke-width' && value === 0 && this.hasStroke) {
-                    element.removeAttribute('stroke');
-                    this.hasStroke = false;
-                }
-            };
-
 
         /**
          * Allows direct access to the Highcharts rendering layer in order to draw
@@ -4304,9 +4155,7 @@
                     .attr({
                         'version': '1.1',
                         'class': 'highcharts-root'
-                    })
-
-                    .css(this.getStyle(style));
+                    });
                 element = boxWrapper.element;
                 container.appendChild(element);
 
@@ -4406,32 +4255,64 @@
                 }
             },
 
-
-
             /**
-             * Get the global style setting for the renderer.
-             * @private
-             * @param  {CSSObject} style - Style settings.
-             * @return {CSSObject} The style settings mixed with defaults.
+             * General method for adding a definition to the SVG `defs` tag. Can be used
+             *   for gradients, fills, filters etc. Styled mode only. A hook for adding
+             *   general definitions to the SVG's defs tag. Definitions can be
+             *   referenced from the CSS by its `id`. Read more in
+             *   [gradients, shadows and patterns]{@link http://www.highcharts.com/docs/
+             *   chart-design-and-style/gradients-shadows-and-patterns}.
+             *   Styled mode only.
+             *
+             * @param {Object} def - A serialized form of an SVG definition, including
+             *   children
+             *
+             * @return {SVGElement} The inserted node. 
              */
-            getStyle: function(style) {
-                this.style = extend({
+            definition: function(def) {
+                var ren = this;
 
-                    fontFamily: '"Lucida Grande", "Lucida Sans Unicode", ' +
-                        'Arial, Helvetica, sans-serif',
-                    fontSize: '12px'
+                function recurse(config, parent) {
+                    var ret;
+                    each(splat(config), function(item) {
+                        var node = ren.createElement(item.tagName),
+                            attr = {};
 
-                }, style);
-                return this.style;
+                        // Set attributes
+                        objectEach(item, function(val, key) {
+                            if (
+                                key !== 'tagName' &&
+                                key !== 'children' &&
+                                key !== 'textContent'
+                            ) {
+                                attr[key] = val;
+                            }
+                        });
+                        node.attr(attr);
+
+                        // Add to the tree
+                        node.add(parent || ren.defs);
+
+                        // Add text content
+                        if (item.textContent) {
+                            node.element.appendChild(
+                                doc.createTextNode(item.textContent)
+                            );
+                        }
+
+                        // Recurse
+                        recurse(item.children || [], node);
+
+                        ret = node;
+                    });
+
+                    // Return last node added (on top level it's the only one)
+                    return ret;
+                }
+                return recurse(def);
             },
-            /**
-             * Apply the global style on the renderer, mixed with the default styles.
-             * 
-             * @param {CSSObject} style - CSS to apply.
-             */
-            setStyle: function(style) {
-                this.boxWrapper.css(this.getStyle(style));
-            },
+
+
 
 
             /**
@@ -4629,10 +4510,6 @@
                     getLineHeight = function(tspan) {
                         var fontSizeStyle;
 
-                        fontSizeStyle = /(px|em)$/.test(tspan && tspan.style.fontSize) ?
-                            tspan.style.fontSize :
-                            (fontSize || renderer.style.fontSize || 12);
-
 
                         return textLineHeight ?
                             pInt(textLineHeight) :
@@ -4698,8 +4575,14 @@
                     if (hasMarkup) {
                         lines = textStr
 
-                            .replace(/<(b|strong)>/g, '<span style="font-weight:bold">')
-                            .replace(/<(i|em)>/g, '<span style="font-style:italic">')
+                            .replace(
+                                /<(b|strong)>/g,
+                                '<span class="highcharts-strong">'
+                            )
+                            .replace(
+                                /<(i|em)>/g,
+                                '<span class="highcharts-emphasized">'
+                            )
 
                             .replace(/<a/g, '<span')
                             .replace(/<\/(b|strong|i|em|a)>/g, '</span>')
@@ -4758,10 +4641,6 @@
                                         span.match(hrefRegex)[1] + '\"'
                                     );
                                     attr(tspan, 'class', 'highcharts-anchor');
-
-                                    css(tspan, {
-                                        cursor: 'pointer'
-                                    });
 
                                 }
 
@@ -5040,53 +4919,6 @@
                 }, normalState));
 
 
-                // Presentational
-                var normalStyle,
-                    hoverStyle,
-                    pressedStyle,
-                    disabledStyle;
-
-                // Normal state - prepare the attributes
-                normalState = merge({
-                    fill: '#f7f7f7',
-                    stroke: '#cccccc',
-                    'stroke-width': 1,
-                    style: {
-                        color: '#333333',
-                        cursor: 'pointer',
-                        fontWeight: 'normal'
-                    }
-                }, normalState);
-                normalStyle = normalState.style;
-                delete normalState.style;
-
-                // Hover state
-                hoverState = merge(normalState, {
-                    fill: '#e6e6e6'
-                }, hoverState);
-                hoverStyle = hoverState.style;
-                delete hoverState.style;
-
-                // Pressed state
-                pressedState = merge(normalState, {
-                    fill: '#e6ebf5',
-                    style: {
-                        color: '#000000',
-                        fontWeight: 'bold'
-                    }
-                }, pressedState);
-                pressedStyle = pressedState.style;
-                delete pressedState.style;
-
-                // Disabled state
-                disabledState = merge(normalState, {
-                    style: {
-                        color: '#cccccc'
-                    }
-                }, disabledState);
-                disabledStyle = disabledState.style;
-                delete disabledState.style;
-
 
                 // Add the events. IE9 and IE10 need mouseover and mouseout to funciton
                 // (#667).
@@ -5115,29 +4947,9 @@
                         );
 
 
-                    label.attr([
-                            normalState,
-                            hoverState,
-                            pressedState,
-                            disabledState
-                        ][state || 0])
-                        .css([
-                            normalStyle,
-                            hoverStyle,
-                            pressedStyle,
-                            disabledStyle
-                        ][state || 0]);
-
                 };
 
 
-
-                // Presentational attributes
-                label
-                    .attr(normalState)
-                    .css(extend({
-                        cursor: 'default'
-                    }, normalStyle));
 
 
                 return label
@@ -5196,8 +5008,6 @@
              */
             path: function(path) {
                 var attribs = {
-
-                    fill: 'none'
 
                 };
                 if (isArray(path)) {
@@ -5322,12 +5132,6 @@
                         height: Math.max(height, 0)
                     };
 
-
-                if (strokeWidth !== undefined) {
-                    attribs.strokeWidth = strokeWidth;
-                    attribs = wrapper.crisp(attribs);
-                }
-                attribs.fill = 'none';
 
 
                 if (r) {
@@ -5498,8 +5302,6 @@
                 if (symbolFn) {
                     obj = this.path(path);
 
-
-                    obj.attr('fill', 'none');
 
 
                     // expando properties for use in animate and attr
@@ -5993,12 +5795,10 @@
                     baseline;
 
 
-                fontSize = fontSize ||
-                    // When the elem is a DOM element (#5932)
-                    (elem && elem.style && elem.style.fontSize) ||
-                    // Fall back on the renderer style default
-                    (this.style && this.style.fontSize);
-
+                fontSize = elem && SVGElement.prototype.getStyle.call(
+                    elem,
+                    'font-size'
+                );
 
 
                 // Handle different units
@@ -6122,11 +5922,10 @@
                 }
 
 
-                needsBox = hasBGImage;
+                needsBox = true; // for styling
                 getCrispAdjust = function() {
-                    return (strokeWidth || 0) % 2 / 2;
+                    return box.strokeWidth() % 2 / 2;
                 };
-
 
 
                 /**
@@ -6323,18 +6122,9 @@
                     boxAttr(key, value);
                 };
 
-                wrapper.strokeSetter =
-                    wrapper.fillSetter =
-                    wrapper.rSetter = function(value, key) {
-                        if (key !== 'r') {
-                            if (key === 'fill' && value) {
-                                needsBox = true;
-                            }
-                            // for animation getter (#6776)
-                            wrapper[key] = value;
-                        }
-                        boxAttr(key, value);
-                    };
+                wrapper.rSetter = function(value, key) {
+                    boxAttr(key, value);
+                };
 
                 wrapper.anchorXSetter = function(value, key) {
                     anchorX = wrapper.anchorX = value;
@@ -6394,20 +6184,6 @@
                             x: bBox.x - padding,
                             y: bBox.y - padding
                         };
-                    },
-
-                    /**
-                     * Apply the shadow to the box.
-                     * @ignore
-                     */
-                    shadow: function(b) {
-                        if (b) {
-                            updateBoxSize();
-                            if (box) {
-                                box.shadow(b);
-                            }
-                        }
-                        return wrapper;
                     },
 
                     /**
@@ -6545,15 +6321,6 @@
                     marginTop: translateY
                 });
 
-
-                if (wrapper.shadows) { // used in labels/tooltip
-                    each(wrapper.shadows, function(shadow) {
-                        css(shadow, {
-                            marginLeft: translateX + 1,
-                            marginTop: translateY + 1
-                        });
-                    });
-                }
 
 
                 // apply inversion
@@ -6744,9 +6511,6 @@
                     })
                     .css({
 
-                        fontFamily: this.style.fontFamily,
-                        fontSize: this.style.fontSize,
-
                         position: 'absolute'
                     });
 
@@ -6895,39 +6659,6 @@
          * @optionparent
          */
         H.defaultOptions = {
-
-
-            /**
-             * An array containing the default colors for the chart's series. When
-             * all colors are used, new colors are pulled from the start again.
-             * 
-             * Default colors can also be set on a series or series.type basis,
-             * see [column.colors](#plotOptions.column.colors), [pie.colors](#plotOptions.
-             * pie.colors).
-             * 
-             * In styled mode, the colors option doesn't exist. Instead, colors
-             * are defined in CSS and applied either through series or point class
-             * names, or through the [chart.colorCount](#chart.colorCount) option.
-             * 
-             * 
-             * ### Legacy
-             * 
-             * In Highcharts 3.x, the default colors were:
-             * 
-             * <pre>colors: ['#2f7ed8', '#0d233a', '#8bbc21', '#910000', '#1aadce', 
-             *     '#492970', '#f28f43', '#77a1e5', '#c42525', '#a6c96a']</pre> 
-             * 
-             * In Highcharts 2.x, the default colors were:
-             * 
-             * <pre>colors: ['#4572A7', '#AA4643', '#89A54E', '#80699B', '#3D96AE', 
-             *    '#DB843D', '#92A8CD', '#A47D7C', '#B5CA92']</pre>
-             * 
-             * @type {Array<Color>}
-             * @sample {highcharts} highcharts/chart/colors/ Assign a global color theme
-             * @default ["#7cb5ec", "#434348", "#90ed7d", "#f7a35c", "#8085e9",
-             *          "#f15c80", "#e4d354", "#2b908f", "#f45b5b", "#91e8e1"]
-             */
-            colors: '#7cb5ec #434348 #90ed7d #f7a35c #8085e9 #f15c80 #e4d354 #2b908f #f45b5b #91e8e1'.split(' '),
 
 
 
@@ -7566,6 +7297,20 @@
 
 
                 /**
+                 * In styled mode, this sets how many colors the class names
+                 * should rotate between. With ten colors, series (or points) are
+                 * given class names like `highcharts-color-0`, `highcharts-color-
+                 * 0` [...] `highcharts-color-9`. The equivalent in non-styled mode
+                 * is to set colors using the [colors](#colors) setting.
+                 * 
+                 * @type {Number}
+                 * @default 10
+                 * @since 5.0.0
+                 */
+                colorCount: 10,
+
+
+                /**
                  * Alias of `type`.
                  * 
                  * @validvalue ["line", "spline", "column", "area", "areaspline", "pie"]
@@ -7763,167 +7508,6 @@
                  */
                 height: null,
 
-
-
-                /**
-                 * The color of the outer chart border.
-                 * 
-                 * @type {Color}
-                 * @see In styled mode, the stroke is set with the `.highcharts-background`
-                 * class.
-                 * @sample {highcharts} highcharts/chart/bordercolor/ Brown border
-                 * @sample {highstock} stock/chart/border/ Brown border
-                 * @sample {highmaps} maps/chart/border/ Border options
-                 * @default #335cad
-                 */
-                borderColor: '#335cad',
-
-                /**
-                 * The pixel width of the outer chart border.
-                 * 
-                 * @type {Number}
-                 * @see In styled mode, the stroke is set with the `.highcharts-background`
-                 * class.
-                 * @sample {highcharts} highcharts/chart/borderwidth/ 5px border
-                 * @sample {highstock} stock/chart/border/
-                 *         2px border
-                 * @sample {highmaps} maps/chart/border/
-                 *         Border options
-                 * @default 0
-                 * @apioption chart.borderWidth
-                 */
-
-                /**
-                 * The background color or gradient for the outer chart area.
-                 * 
-                 * @type {Color}
-                 * @see In styled mode, the background is set with the `.highcharts-background` class.
-                 * @sample {highcharts} highcharts/chart/backgroundcolor-color/ Color
-                 * @sample {highcharts} highcharts/chart/backgroundcolor-gradient/ Gradient
-                 * @sample {highstock} stock/chart/backgroundcolor-color/
-                 *         Color
-                 * @sample {highstock} stock/chart/backgroundcolor-gradient/
-                 *         Gradient
-                 * @sample {highmaps} maps/chart/backgroundcolor-color/
-                 *         Color
-                 * @sample {highmaps} maps/chart/backgroundcolor-gradient/
-                 *         Gradient
-                 * @default #FFFFFF
-                 */
-                backgroundColor: '#ffffff',
-
-                /**
-                 * The background color or gradient for the plot area.
-                 * 
-                 * @type {Color}
-                 * @see In styled mode, the plot background is set with the `.highcharts-plot-background` class.
-                 * @sample {highcharts} highcharts/chart/plotbackgroundcolor-color/
-                 *         Color
-                 * @sample {highcharts} highcharts/chart/plotbackgroundcolor-gradient/
-                 *         Gradient
-                 * @sample {highstock} stock/chart/plotbackgroundcolor-color/
-                 *         Color
-                 * @sample {highstock} stock/chart/plotbackgroundcolor-gradient/
-                 *         Gradient
-                 * @sample {highmaps} maps/chart/plotbackgroundcolor-color/
-                 *         Color
-                 * @sample {highmaps} maps/chart/plotbackgroundcolor-gradient/
-                 *         Gradient
-                 * @default null
-                 * @apioption chart.plotBackgroundColor
-                 */
-
-
-                /**
-                 * The URL for an image to use as the plot background. To set an image
-                 * as the background for the entire chart, set a CSS background image
-                 * to the container element. Note that for the image to be applied to
-                 * exported charts, its URL needs to be accessible by the export server.
-                 * 
-                 * @type {String}
-                 * @see In styled mode, a plot background image can be set with the
-                 * `.highcharts-plot-background` class and a [custom pattern](http://www.
-                 * highcharts.com/docs/chart-design-and-style/gradients-shadows-and-
-                 * patterns).
-                 * @sample {highcharts} highcharts/chart/plotbackgroundimage/ Skies
-                 * @sample {highstock} stock/chart/plotbackgroundimage/ Skies
-                 * @default null
-                 * @apioption chart.plotBackgroundImage
-                 */
-
-                /**
-                 * The color of the inner chart or plot area border.
-                 * 
-                 * @type {Color}
-                 * @see In styled mode, a plot border stroke can be set with the `.
-                 * highcharts-plot-border` class.
-                 * @sample {highcharts} highcharts/chart/plotbordercolor/ Blue border
-                 * @sample {highstock} stock/chart/plotborder/ Blue border
-                 * @sample {highmaps} maps/chart/plotborder/ Plot border options
-                 * @default #cccccc
-                 */
-                plotBorderColor: '#cccccc'
-
-
-                /**
-                 * The pixel width of the plot area border.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/chart/plotborderwidth/ 1px border
-                 * @sample {highstock} stock/chart/plotborder/
-                 *         2px border
-                 * @sample {highmaps} maps/chart/plotborder/
-                 *         Plot border options
-                 * @default 0
-                 * @apioption chart.plotBorderWidth
-                 */
-
-                /**
-                 * Whether to apply a drop shadow to the plot area. Requires that
-                 * plotBackgroundColor be set. The shadow can be an object configuration
-                 * containing `color`, `offsetX`, `offsetY`, `opacity` and `width`.
-                 * 
-                 * @type {Boolean|Object}
-                 * @sample {highcharts} highcharts/chart/plotshadow/ Plot shadow
-                 * @sample {highstock} stock/chart/plotshadow/
-                 *         Plot shadow
-                 * @sample {highmaps} maps/chart/plotborder/
-                 *         Plot border options
-                 * @default false
-                 * @apioption chart.plotShadow
-                 */
-
-                /**
-                 * When true, cartesian charts like line, spline, area and column are
-                 * transformed into the polar coordinate system. Requires `highcharts-
-                 * more.js`.
-                 * 
-                 * @type {Boolean}
-                 * @default false
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption chart.polar
-                 */
-
-                /**
-                 * Whether to reflow the chart to fit the width of the container div
-                 * on resizing the window.
-                 * 
-                 * @type {Boolean}
-                 * @sample {highcharts} highcharts/chart/reflow-true/ True by default
-                 * @sample {highcharts} highcharts/chart/reflow-false/ False
-                 * @sample {highstock} stock/chart/reflow-true/
-                 *         True by default
-                 * @sample {highstock} stock/chart/reflow-false/
-                 *         False
-                 * @sample {highmaps} maps/chart/reflow-true/
-                 *         True by default
-                 * @sample {highmaps} maps/chart/reflow-false/
-                 *         False
-                 * @default true
-                 * @since 2.1
-                 * @apioption chart.reflow
-                 */
 
 
 
@@ -8710,37 +8294,6 @@
 
 
                     /**
-                     * The color for the active up or down arrow in the legend page navigation.
-                     * 
-                     * @type {Color}
-                     * @see In styled mode, the active arrow be styled with the `.highcharts-legend-nav-active` class.
-                     * @sample {highcharts} highcharts/legend/navigation/ Legend page navigation demonstrated
-                     * @sample {highstock} highcharts/legend/navigation/ Legend page navigation demonstrated
-                     * @default #003399
-                     * @since 2.2.4
-                     */
-                    activeColor: '#003399',
-
-                    /**
-                     * The color of the inactive up or down arrow in the legend page
-                     * navigation. .
-                     * 
-                     * @type {Color}
-                     * @see In styled mode, the inactive arrow be styled with the
-                     *      `.highcharts-legend-nav-inactive` class.
-                     * @sample {highcharts} highcharts/legend/navigation/
-                     *         Legend page navigation demonstrated
-                     * @sample {highstock} highcharts/legend/navigation/
-                     *         Legend page navigation demonstrated
-                     * @default {highcharts} #cccccc
-                     * @default {highstock} #cccccc
-                     * @default {highmaps} ##cccccc
-                     * @since 2.2.4
-                     */
-                    inactiveColor: '#cccccc'
-
-
-                    /**
                      * How to animate the pages when navigating up or down. A value of `true`
                      * applies the default navigation given in the chart.animation option.
                      * Additional options can be given as an object containing values for
@@ -8853,76 +8406,6 @@
                  * @apioption legend.style
                  */
 
-
-
-                /**
-                 * CSS styles for each legend item. Only a subset of CSS is supported,
-                 * notably those options related to text. The default `textOverflow`
-                 * property makes long texts truncate. Set it to `null` to wrap text
-                 * instead. A `width` property can be added to control the text width.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, the legend items can be styled with the `.
-                 * highcharts-legend-item` class.
-                 * @sample {highcharts} highcharts/legend/itemstyle/ Bold black text
-                 * @sample {highmaps} maps/legend/itemstyle/ Item text styles
-                 * @default { "color": "#333333", "cursor": "pointer", "fontSize": "12px", "fontWeight": "bold", "textOverflow": "ellipsis" }
-                 */
-                itemStyle: {
-                    color: '#333333',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    textOverflow: 'ellipsis'
-                },
-
-                /**
-                 * CSS styles for each legend item in hover mode. Only a subset of
-                 * CSS is supported, notably those options related to text. Properties
-                 * are inherited from `style` unless overridden here.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, the hovered legend items can be styled with
-                 * the `.highcharts-legend-item:hover` pesudo-class.
-                 * @sample {highcharts} highcharts/legend/itemhoverstyle/ Red on hover
-                 * @sample {highmaps} maps/legend/itemstyle/ Item text styles
-                 * @default { "color": "#000000" }
-                 */
-                itemHoverStyle: {
-                    color: '#000000'
-                },
-
-                /**
-                 * CSS styles for each legend item when the corresponding series or
-                 * point is hidden. Only a subset of CSS is supported, notably those
-                 * options related to text. Properties are inherited from `style`
-                 * unless overridden here.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, the hidden legend items can be styled with
-                 * the `.highcharts-legend-item-hidden` class.
-                 * @sample {highcharts} highcharts/legend/itemhiddenstyle/ Darker gray color
-                 * @default { "color": "#cccccc" }
-                 */
-                itemHiddenStyle: {
-                    color: '#cccccc'
-                },
-
-                /**
-                 * Whether to apply a drop shadow to the legend. A `backgroundColor`
-                 * also needs to be applied for this to take effect. The shadow can be
-                 * an object configuration containing `color`, `offsetX`, `offsetY`,
-                 * `opacity` and `width`.
-                 * 
-                 * @type {Boolean|Object}
-                 * @sample {highcharts} highcharts/legend/shadow/
-                 *         White background and drop shadow
-                 * @sample {highstock} stock/legend/align/
-                 *         Various legend options
-                 * @sample {highmaps} maps/legend/border-background/
-                 *         Border and background options
-                 * @default false
-                 */
-                shadow: false,
 
 
                 /**
@@ -9089,20 +8572,6 @@
                      */
 
 
-
-                    /**
-                     * Generic CSS styles for the legend title.
-                     * 
-                     * @type {CSSObject}
-                     * @see In styled mode, the legend title is styled with the
-                     * `.highcharts-legend-title` class.
-                     * @default {"fontWeight":"bold"}
-                     * @since 3.0
-                     */
-                    style: {
-                        fontWeight: 'bold'
-                    }
-
                 }
             },
 
@@ -9138,41 +8607,6 @@
                  * @since 1.2.0
                  * @apioption loading.showDuration
                  */
-
-
-                /**
-                 * CSS styles for the loading label `span`.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, the loading label is styled with the
-                 * `.highcharts-legend-loading-inner` class.
-                 * @sample {highcharts|highmaps} highcharts/loading/labelstyle/ Vertically centered
-                 * @sample {highstock} stock/loading/general/ Label styles
-                 * @default { "fontWeight": "bold", "position": "relative", "top": "45%" }
-                 * @since 1.2.0
-                 */
-                labelStyle: {
-                    fontWeight: 'bold',
-                    position: 'relative',
-                    top: '45%'
-                },
-
-                /**
-                 * CSS styles for the loading screen that covers the plot area.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, the loading label is styled with the `.highcharts-legend-loading` class.
-                 * @sample {highcharts|highmaps} highcharts/loading/style/ Gray plot area, white text
-                 * @sample {highstock} stock/loading/general/ Gray plot area, white text
-                 * @default { "position": "absolute", "backgroundColor": "#ffffff", "opacity": 0.5, "textAlign": "center" }
-                 * @since 1.2.0
-                 */
-                style: {
-                    position: 'absolute',
-                    backgroundColor: '#ffffff',
-                    opacity: 0.5,
-                    textAlign: 'center'
-                }
 
             },
 
@@ -9290,103 +8724,10 @@
                  */
                 snap: isTouchDevice ? 25 : 10,
 
-
-                /**
-                 * The background color or gradient for the tooltip.
-                 * 
-                 * In styled mode, the stroke width is set in the `.highcharts-tooltip-box` class.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/tooltip/backgroundcolor-solid/ Yellowish background
-                 * @sample {highcharts} highcharts/tooltip/backgroundcolor-gradient/ Gradient
-                 * @sample {highcharts} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @sample {highstock} stock/tooltip/general/ Custom tooltip
-                 * @sample {highstock} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @sample {highmaps} maps/tooltip/background-border/ Background and border demo
-                 * @sample {highmaps} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @default rgba(247,247,247,0.85)
-                 */
-                backgroundColor: color('#f7f7f7').setOpacity(0.85).get(),
-
-                /**
-                 * The pixel width of the tooltip border.
-                 * 
-                 * In styled mode, the stroke width is set in the `.highcharts-tooltip-box` class.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/tooltip/bordercolor-default/ 2px by default
-                 * @sample {highcharts} highcharts/tooltip/borderwidth/ No border (shadow only)
-                 * @sample {highcharts} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @sample {highstock} stock/tooltip/general/ Custom tooltip
-                 * @sample {highstock} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @sample {highmaps} maps/tooltip/background-border/ Background and border demo
-                 * @sample {highmaps} highcharts/css/tooltip-border-background/ Tooltip in styled mode
-                 * @default 1
-                 */
-                borderWidth: 1,
-
-                /**
-                 * The HTML of the tooltip header line. Variables are enclosed by
-                 * curly brackets. Available variables are `point.key`, `series.name`,
-                 * `series.color` and other members from the `point` and `series`
-                 * objects. The `point.key` variable contains the category name, x
-                 * value or datetime string depending on the type of axis. For datetime
-                 * axes, the `point.key` date format can be set using tooltip.xDateFormat.
-                 * 
-                 * @type {String}
-                 * @sample {highcharts} highcharts/tooltip/footerformat/
-                 *         A HTML table in the tooltip
-                 * @sample {highstock} highcharts/tooltip/footerformat/
-                 *         A HTML table in the tooltip
-                 * @sample {highmaps} maps/tooltip/format/ Format demo
-                 */
-                headerFormat: '<span style="font-size: 10px">{point.key}</span><br/>',
-
-                /**
-                 * The HTML of the point's line in the tooltip. Variables are enclosed
-                 * by curly brackets. Available variables are point.x, point.y, series.
-                 * name and series.color and other properties on the same form. Furthermore,
-                 * point.y can be extended by the `tooltip.valuePrefix` and `tooltip.
-                 * valueSuffix` variables. This can also be overridden for each series,
-                 * which makes it a good hook for displaying units.
-                 * 
-                 * In styled mode, the dot is colored by a class name rather
-                 * than the point color.
-                 * 
-                 * @type {String}
-                 * @sample {highcharts} highcharts/tooltip/pointformat/ A different point format with value suffix
-                 * @sample {highmaps} maps/tooltip/format/ Format demo
-                 * @default <span style="color:{point.color}">\u25CF</span> {series.name}: <b>{point.y}</b><br/>
-                 * @since 2.2
-                 */
-                pointFormat: '<span style="color:{point.color}">\u25CF</span> {series.name}: <b>{point.y}</b><br/>',
-
-                /**
-                 * Whether to apply a drop shadow to the tooltip.
-                 * 
-                 * @type {Boolean}
-                 * @sample {highcharts} highcharts/tooltip/bordercolor-default/ True by default
-                 * @sample {highcharts} highcharts/tooltip/shadow/ False
-                 * @sample {highmaps} maps/tooltip/positioner/ Fixed tooltip position, border and shadow disabled
-                 * @default true
-                 */
-                shadow: true,
-
-                /**
-                 * CSS styles for the tooltip. The tooltip can also be styled through
-                 * the CSS class `.highcharts-tooltip`.
-                 * 
-                 * @type {CSSObject}
-                 * @sample {highcharts} highcharts/tooltip/style/ Greater padding, bold text
-                 * @default { "color": "#333333", "cursor": "default", "fontSize": "12px", "pointerEvents": "none", "whiteSpace": "nowrap" }
-                 */
-                style: {
-                    color: '#333333',
-                    cursor: 'default',
-                    fontSize: '12px',
-                    pointerEvents: 'none', // #1686 http://caniuse.com/#feat=pointer-events
-                    whiteSpace: 'nowrap'
-                }
+                headerFormat: '<span class="highcharts-header">{point.key}</span><br/>',
+                pointFormat: '<span class="highcharts-color-{point.colorIndex}">' +
+                    '\u25CF</span> {series.name}: <span class="highcharts-strong">' +
+                    '{point.y}</span><br/>',
 
 
 
@@ -9756,21 +9097,6 @@
 
 
                 /**
-                 * CSS styles for the credits label.
-                 * 
-                 * @type {CSSObject}
-                 * @see In styled mode, credits styles can be set with the
-                 * `.highcharts-credits` class.
-                 * @default { "cursor": "pointer", "color": "#999999", "fontSize": "10px" }
-                 */
-                style: {
-                    cursor: 'pointer',
-                    color: '#999999',
-                    fontSize: '9px'
-                },
-
-
-                /**
                  * The text for the credits label.
                  *
                  * @productdesc {highmaps}
@@ -9993,10 +9319,6 @@
                             0,
                             labelOptions.useHTML
                         )
-
-                        // without position absolute, IE export sometimes is
-                        // wrong.
-                        .css(merge(labelOptions.style))
 
                         .add(axis.labelGroup) :
                         null;
@@ -10250,19 +9572,8 @@
                     renderer = axis.chart.renderer;
 
 
-                var gridPrefix = type ? type + 'Grid' : 'grid',
-                    gridLineWidth = options[gridPrefix + 'LineWidth'],
-                    gridLineColor = options[gridPrefix + 'LineColor'],
-                    dashStyle = options[gridPrefix + 'LineDashStyle'];
-
 
                 if (!gridLine) {
-
-                    attribs.stroke = gridLineColor;
-                    attribs['stroke-width'] = gridLineWidth;
-                    if (dashStyle) {
-                        attribs.dashstyle = dashStyle;
-                    }
 
                     if (!type) {
                         attribs.zIndex = 1;
@@ -10318,11 +9629,6 @@
                     y = xy.y;
 
 
-                var tickWidth = pick(
-                        options[tickPrefix + 'Width'], !type && axis.isXAxis ? 1 : 0
-                    ), // X axis defaults to 1
-                    tickColor = options[tickPrefix + 'Color'];
-
 
                 if (tickSize) {
 
@@ -10337,11 +9643,6 @@
                             .addClass('highcharts-' + (type ? type + '-' : '') + 'tick')
                             .add(axis.axisGroup);
 
-
-                        mark.attr({
-                            stroke: tickColor,
-                            'stroke-width': tickWidth
-                        });
 
                     }
                     mark[isNewMark ? 'attr' : 'animate']({
@@ -10650,25 +9951,6 @@
 
 
                     /**
-                     * CSS styles for the label. Use `whiteSpace: 'nowrap'` to prevent
-                     * wrapping of category labels. Use `textOverflow: 'none'` to
-                     * prevent ellipsis (dots).
-                     * 
-                     * In styled mode, the labels are styled with the
-                     * `.highcharts-axis-labels` class.
-                     * 
-                     * @type {CSSObject}
-                     * @sample  {highcharts} highcharts/xaxis/labels-style/
-                     *          Red X axis labels
-                     */
-                    style: {
-                        color: '#666666',
-                        cursor: 'default',
-                        fontSize: '11px'
-                    },
-
-
-                    /**
                      * The x position offset of the label relative to the tick position
                      * on the axis.
                      * 
@@ -10887,26 +10169,6 @@
                     align: 'middle', // low, middle or high
 
 
-
-                    /**
-                     * CSS styles for the title. If the title text is longer than the
-                     * axis length, it will wrap to multiple lines by default. This can
-                     * be customized by setting `textOverflow: 'ellipsis'`, by 
-                     * setting a specific `width` or by setting `wordSpace: 'nowrap'`.
-                     * 
-                     * 
-                     * In styled mode, the stroke width is given in the
-                     * `.highcharts-axis-title` class.
-                     * 
-                     * @type {CSSObject}
-                     * @sample {highcharts} highcharts/xaxis/title-style/ Red
-                     * @sample {highcharts} highcharts/css/axis/ Styled mode
-                     * @default { "color": "#666666" }
-                     */
-                    style: {
-                        color: '#666666'
-                    }
-
                 },
 
                 /**
@@ -10935,129 +10197,6 @@
                  */
                 type: 'linear', // linear, logarithmic or datetime
 
-
-
-                /**
-                 * Color of the minor, secondary grid lines.
-                 * 
-                 * In styled mode, the stroke width is given in the
-                 * `.highcharts-minor-grid-line` class.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/yaxis/minorgridlinecolor/
-                 *         Bright grey lines from Y axis
-                 * @sample {highcharts} highcharts/css/axis-grid/
-                 *         Styled mode
-                 * @sample {highstock} stock/xaxis/minorgridlinecolor/
-                 *         Bright grey lines from Y axis
-                 * @sample {highstock} highcharts/css/axis-grid/
-                 *         Styled mode
-                 * @default #f2f2f2
-                 */
-                minorGridLineColor: '#f2f2f2',
-                // minorGridLineDashStyle: null,
-
-                /**
-                 * Width of the minor, secondary grid lines.
-                 * 
-                 * In styled mode, the stroke width is given in the
-                 * `.highcharts-grid-line` class.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/yaxis/minorgridlinewidth/
-                 *         2px lines from Y axis
-                 * @sample {highcharts} highcharts/css/axis-grid/
-                 *         Styled mode
-                 * @sample {highstock} stock/xaxis/minorgridlinewidth/
-                 *         2px lines from Y axis
-                 * @sample {highstock} highcharts/css/axis-grid/
-                 *         Styled mode
-                 * @default 1
-                 */
-                minorGridLineWidth: 1,
-
-                /**
-                 * Color for the minor tick marks.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/yaxis/minortickcolor/
-                 *         Black tick marks on Y axis
-                 * @sample {highstock} stock/xaxis/minorticks/
-                 *         Black tick marks on Y axis
-                 * @default #999999
-                 */
-                minorTickColor: '#999999',
-
-                /**
-                 * The color of the line marking the axis itself.
-                 * 
-                 * In styled mode, the line stroke is given in the
-                 * `.highcharts-axis-line` or `.highcharts-xaxis-line` class.
-                 * 
-                 * @productdesc {highmaps}
-                 * In Highmaps, the axis line is hidden by default.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/yaxis/linecolor/ A red line on Y axis
-                 * @sample {highcharts} highcharts/css/axis/ Axes in styled mode
-                 * @sample {highstock} stock/xaxis/linecolor/ A red line on X axis
-                 * @sample {highstock} highcharts/css/axis/ Axes in styled mode
-                 * @default #ccd6eb
-                 */
-                lineColor: '#ccd6eb',
-
-                /**
-                 * The width of the line marking the axis itself.
-                 * 
-                 * In styled mode, the stroke width is given in the
-                 * `.highcharts-axis-line` or `.highcharts-xaxis-line` class.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/yaxis/linecolor/ A 1px line on Y axis
-                 * @sample {highcharts} highcharts/css/axis/ Axes in styled mode
-                 * @sample {highstock} stock/xaxis/linewidth/ A 2px line on X axis
-                 * @sample {highstock} highcharts/css/axis/ Axes in styled mode
-                 * @default {highcharts} 1
-                 * @default {highstock} 1
-                 * @default {highmaps} 0
-                 */
-                lineWidth: 1,
-
-                /**
-                 * Color of the grid lines extending the ticks across the plot area.
-                 * 
-                 * In styled mode, the stroke is given in the `.highcharts-grid-line`
-                 * class.
-                 *
-                 * @productdesc {highmaps}
-                 * In Highmaps, the grid lines are hidden by default.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/yaxis/gridlinecolor/ Green lines
-                 * @sample {highcharts} highcharts/css/axis-grid/ Styled mode
-                 * @sample {highstock} stock/xaxis/gridlinecolor/ Green lines
-                 * @sample {highstock} highcharts/css/axis-grid/ Styled mode
-                 * @default #e6e6e6
-                 */
-                gridLineColor: '#e6e6e6',
-                // gridLineDashStyle: 'solid',
-                // gridLineWidth: 0,
-
-                /**
-                 * Color for the main tick marks.
-                 * 
-                 * In styled mode, the stroke is given in the `.highcharts-tick`
-                 * class.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/xaxis/tickcolor/ Red ticks on X axis
-                 * @sample {highcharts} highcharts/css/axis-grid/ Styled mode
-                 * @sample {highstock} stock/xaxis/ticks/ Formatted ticks on X axis
-                 * @sample {highstock} highcharts/css/axis-grid/ Styled mode
-                 * @default #ccd6eb
-                 */
-                tickColor: '#ccd6eb'
-                // tickWidth: 1
 
             },
 
@@ -11252,57 +10391,9 @@
                      */
                     formatter: function() {
                         return H.numberFormat(this.total, -1);
-                    },
-
-
-                    /**
-                     * CSS styles for the label.
-                     * 
-                     * In styled mode, the styles are set in the
-                     * `.highcharts-stack-label` class.
-                     * 
-                     * @type {CSSObject}
-                     * @sample {highcharts} highcharts/yaxis/stacklabels-style/
-                     *         Red stack total labels
-                     * @since 2.1.5
-                     * @product highcharts
-                     */
-                    style: {
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        color: '#000000',
-                        textOutline: '1px contrast'
                     }
 
-                },
-
-
-                /**
-                 * The width of the grid lines extending the ticks across the plot
-                 * area.
-                 * 
-                 * @productdesc {highmaps}
-                 * In Highmaps, the grid lines are hidden by default.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/yaxis/gridlinewidth/ 2px lines
-                 * @sample {highstock} stock/xaxis/gridlinewidth/ 2px lines
-                 * @default 1
-                 * @product highcharts highstock
-                 */
-                gridLineWidth: 1,
-
-                /**
-                 * The width of the line marking the axis itself.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/yaxis/linecolor/ A 1px line on Y axis
-                 * @sample {highstock} stock/xaxis/linewidth/ A 2px line on X axis
-                 * @default 0
-                 * @product highcharts highstock
-                 */
-                lineWidth: 0
-                // tickWidth: 0
+                }
 
             },
 
@@ -13598,21 +12689,15 @@
                         })
                         .addClass('highcharts-axis-title')
 
-                        .css(axisTitleOptions.style)
-
                         .add(axis.axisGroup);
                     axis.axisTitle.isNew = true;
                 }
 
                 // Max width defaults to the length of the axis
 
-                if (!axisTitleOptions.style.width && !axis.isRadial) {
-
-                    axis.axisTitle.css({
-                        width: axis.len
-                    });
-
-                }
+                axis.axisTitle.css({
+                    width: axis.len
+                });
 
 
 
@@ -13842,12 +12927,6 @@
                         .addClass('highcharts-axis-line')
                         .add(this.axisGroup);
 
-
-                    this.axisLine.attr({
-                        stroke: this.options.lineColor,
-                        'stroke-width': this.options.lineWidth,
-                        zIndex: 7
-                    });
 
                 }
             },
@@ -14280,19 +13359,6 @@
                             })
                             .add();
 
-
-                        // Presentational attributes
-                        graphic.attr({
-                            'stroke': options.color || (categorized ? color('#ccd6eb').setOpacity(0.25).get() : '#cccccc'),
-                            'stroke-width': pick(options.width, 1)
-                        }).css({
-                            'pointer-events': 'none'
-                        });
-                        if (options.dashStyle) {
-                            graphic.attr({
-                                dashstyle: options.dashStyle
-                            });
-                        }
 
 
                     }
@@ -14786,26 +13852,6 @@
                 }
 
 
-                // Set the presentational attributes
-                if (isLine) {
-                    attribs = {
-                        stroke: color,
-                        'stroke-width': options.width
-                    };
-                    if (options.dashStyle) {
-                        attribs.dashstyle = options.dashStyle;
-                    }
-
-                } else if (isBand) { // plot band
-                    if (color) {
-                        attribs.fill = color;
-                    }
-                    if (options.borderWidth) {
-                        attribs.stroke = options.borderColor;
-                        attribs['stroke-width'] = options.borderWidth;
-                    }
-                }
-
 
                 // Grouping and zIndex
                 groupAttribs.zIndex = zIndex;
@@ -14927,8 +13973,6 @@
                         .attr(attribs)
                         .add();
 
-
-                    label.css(optionsLabel.style);
 
                 }
 
@@ -15203,6 +14247,52 @@
             },
 
 
+            /**
+             * In styled mode, apply the default filter for the tooltip drop-shadow. It
+             * needs to have an id specific to the chart, otherwise there will be issues
+             * when one tooltip adopts the filter of a different chart, specifically one
+             * where the container is hidden.
+             */
+            applyFilter: function() {
+
+                var chart = this.chart;
+                chart.renderer.definition({
+                    tagName: 'filter',
+                    id: 'drop-shadow-' + chart.index,
+                    opacity: 0.5,
+                    children: [{
+                        tagName: 'feGaussianBlur',
+                        in: 'SourceAlpha',
+                        stdDeviation: 1
+                    }, {
+                        tagName: 'feOffset',
+                        dx: 1,
+                        dy: 1
+                    }, {
+                        tagName: 'feComponentTransfer',
+                        children: [{
+                            tagName: 'feFuncA',
+                            type: 'linear',
+                            slope: 0.3
+                        }]
+                    }, {
+                        tagName: 'feMerge',
+                        children: [{
+                            tagName: 'feMergeNode'
+                        }, {
+                            tagName: 'feMergeNode',
+                            in: 'SourceGraphic'
+                        }]
+                    }]
+                });
+                chart.renderer.definition({
+                    tagName: 'style',
+                    textContent: '.highcharts-tooltip-' + chart.index + '{' +
+                        'filter:url(#drop-shadow-' + chart.index + ')' +
+                        '}'
+                });
+            },
+
 
 
             /**
@@ -15236,17 +14326,12 @@
                             });
 
 
-                        this.label
-                            .attr({
-                                'fill': options.backgroundColor,
-                                'stroke-width': options.borderWidth
-                            })
-                            // #2301, #2657
-                            .css(options.style)
-                            .shadow(options.shadow);
-
                     }
 
+
+                    // Apply the drop-shadow filter
+                    this.applyFilter();
+                    this.label.addClass('highcharts-tooltip-' + this.chart.index);
 
 
                     this.label
@@ -15630,13 +14715,9 @@
 
                         // Prevent the tooltip from flowing over the chart box (#6659)
 
-                        if (!options.style.width) {
-
-                            label.css({
-                                width: this.chart.spacingBox.width
-                            });
-
-                        }
+                        label.css({
+                            width: this.chart.spacingBox.width
+                        });
 
 
                         label.attr({
@@ -15650,15 +14731,6 @@
                                 pick(point.colorIndex, currentSeries.colorIndex)
                             );
 
-
-                        label.attr({
-                            stroke: (
-                                options.borderColor ||
-                                point.color ||
-                                currentSeries.color ||
-                                '#666666'
-                            )
-                        });
 
 
                         tooltip.updatePosition({
@@ -15722,16 +14794,7 @@
                                 .addClass('highcharts-tooltip-box ' + colorClass)
                                 .attr({
                                     'padding': options.padding,
-                                    'r': options.borderRadius,
-
-                                    'fill': options.backgroundColor,
-                                    'stroke': (
-                                        options.borderColor ||
-                                        point.color ||
-                                        series.color ||
-                                        '#333333'
-                                    ),
-                                    'stroke-width': options.borderWidth
+                                    'r': options.borderRadius
 
                                 })
                                 .add(tooltipLabel);
@@ -15741,9 +14804,6 @@
                         tt.attr({
                             text: str
                         });
-
-                        tt.css(options.style)
-                            .shadow(options.shadow);
 
 
                         // Get X position now, so we can move all to the other side in
@@ -16632,8 +15692,6 @@
                                 )
                                 .attr({
 
-                                    fill: chartOptions.selectionMarkerFill || color('#335cad').setOpacity(0.25).get(),
-
                                     'class': 'highcharts-selection-marker',
                                     'zIndex': 7
                                 })
@@ -17502,9 +16560,6 @@
                 this.options = options;
 
 
-                this.itemStyle = options.itemStyle;
-                this.itemHiddenStyle = merge(this.itemStyle, options.itemHiddenStyle);
-
                 this.itemMarginTop = options.itemMarginTop || 0;
                 this.padding = padding;
                 this.initialItemY = padding - 5; // 5 is pixels above the text
@@ -17551,44 +16606,6 @@
                     'highcharts-legend-item-hidden'
                 );
 
-
-                var legend = this,
-                    options = legend.options,
-                    legendItem = item.legendItem,
-                    legendLine = item.legendLine,
-                    legendSymbol = item.legendSymbol,
-                    hiddenColor = legend.itemHiddenStyle.color,
-                    textColor = visible ? options.itemStyle.color : hiddenColor,
-                    symbolColor = visible ? (item.color || hiddenColor) : hiddenColor,
-                    markerOptions = item.options && item.options.marker,
-                    symbolAttr = {
-                        fill: symbolColor
-                    };
-
-                if (legendItem) {
-                    legendItem.css({
-                        fill: textColor,
-                        color: textColor // #1553, oldIE
-                    });
-                }
-                if (legendLine) {
-                    legendLine.attr({
-                        stroke: symbolColor
-                    });
-                }
-
-                if (legendSymbol) {
-
-                    // Apply marker options
-                    if (markerOptions && legendSymbol.isMarker) { // #585
-                        symbolAttr = item.pointAttribs();
-                        if (!visible) {
-                            symbolAttr.stroke = symbolAttr.fill = hiddenColor; // #6769
-                        }
-                    }
-
-                    legendSymbol.attr(symbolAttr);
-                }
 
             },
 
@@ -17740,8 +16757,6 @@
                                 zIndex: 1
                             })
 
-                            .css(titleOptions.style)
-
                             .add(this.group);
                     }
                     bBox = this.title.getBBox();
@@ -17784,9 +16799,6 @@
                     horizontal = options.layout === 'horizontal',
                     symbolWidth = legend.symbolWidth,
                     symbolPadding = options.symbolPadding,
-
-                    itemStyle = legend.itemStyle,
-                    itemHiddenStyle = legend.itemHiddenStyle,
 
                     padding = legend.padding,
                     itemDistance = horizontal ? pick(options.itemDistance, 20) : 0,
@@ -17837,9 +16849,6 @@
                             useHTML
                         )
 
-                        // merge to prevent modifying original (#1021)
-                        .css(merge(item.visible ? itemStyle : itemHiddenStyle))
-
                         .attr({
                             align: ltr ? 'left' : 'right',
                             zIndex: 2
@@ -17849,8 +16858,6 @@
                     // Get the baseline for the first item - the font size is equal for
                     // all
                     if (!legend.baseline) {
-
-                        fontSize = itemStyle.fontSize;
 
                         legend.fontMetrics = renderer.fontMetrics(
                             fontSize,
@@ -17879,17 +16886,13 @@
 
                 // Take care of max width and text overflow (#6659)
 
-                if (!itemStyle.width) {
-
-                    li.css({
-                        width: (
-                            options.itemWidth ||
-                            options.width ||
-                            chart.spacingBox.width
-                        ) - itemExtraWidth
-                    });
-
-                }
+                li.css({
+                    width: (
+                        options.itemWidth ||
+                        options.width ||
+                        chart.spacingBox.width
+                    ) - itemExtraWidth
+                });
 
 
                 // Always update the text
@@ -18124,15 +17127,6 @@
                 }
 
 
-                // Presentational
-                box
-                    .attr({
-                        stroke: options.borderColor,
-                        'stroke-width': options.borderWidth || 0,
-                        fill: options.backgroundColor || 'none'
-                    })
-                    .shadow(options.shadow);
-
 
                 if (legendWidth > 0 && legendHeight > 0) {
                     box[box.isNew ? 'attr' : 'animate'](
@@ -18149,6 +17143,11 @@
                 // hide the border if no items
                 box[display ? 'show' : 'hide']();
 
+
+                // Open for responsiveness
+                if (legendGroup.getStyle('display') === 'none') {
+                    legendWidth = legendHeight = 0;
+                }
 
 
                 legend.legendWidth = legendWidth;
@@ -18295,8 +17294,6 @@
                         this.pager = renderer.text('', 15, 10)
                             .addClass('highcharts-legend-navigation')
 
-                            .css(navOptions.style)
-
                             .add(nav);
 
                         this.down = renderer
@@ -18378,23 +17375,6 @@
                     });
 
 
-                    this.up
-                        .attr({
-                            fill: currentPage === 1 ?
-                                navOptions.inactiveColor : navOptions.activeColor
-                        })
-                        .css({
-                            cursor: currentPage === 1 ? 'default' : 'pointer'
-                        });
-                    this.down
-                        .attr({
-                            fill: currentPage === pageCount ?
-                                navOptions.inactiveColor : navOptions.activeColor
-                        })
-                        .css({
-                            cursor: currentPage === pageCount ? 'default' : 'pointer'
-                        });
-
 
                     scrollOffset = -pages[currentPage - 1] + this.initialItemY;
 
@@ -18465,13 +17445,6 @@
                     attr = {};
 
                 // Draw the line
-
-                attr = {
-                    'stroke-width': options.lineWidth || 0
-                };
-                if (options.dashStyle) {
-                    attr.dashstyle = options.dashStyle;
-                }
 
 
                 this.legendLine = renderer.path([
@@ -19171,25 +18144,10 @@
 
                 chartTitleOptions = options.title = merge(
 
-                    // Default styles
-                    {
-                        style: {
-                            color: '#333333',
-                            fontSize: options.isStock ? '16px' : '18px' // #2944
-                        }
-                    },
-
                     options.title,
                     titleOptions
                 );
                 chartSubtitleOptions = options.subtitle = merge(
-
-                    // Default styles
-                    {
-                        style: {
-                            color: '#666666'
-                        }
-                    },
 
                     options.subtitle,
                     subtitleOptions
@@ -19229,9 +18187,6 @@
                         };
 
 
-                        // Presentational
-                        chart[name].css(chartTitleOptions.style);
-
 
                     }
                 });
@@ -19261,8 +18216,6 @@
                         titleSize;
 
                     if (title) {
-
-                        titleSize = titleOptions.style.fontSize;
 
                         titleSize = renderer.fontMetrics(titleSize, title).b;
 
@@ -19494,18 +18447,6 @@
 
                 // Create the inner container
 
-                containerStyle = extend({
-                    position: 'relative',
-                    overflow: 'hidden', // needed for context menu (avoid scrollbars)
-                    // and content overflow in IE
-                    width: chartWidth + 'px',
-                    height: chartHeight + 'px',
-                    textAlign: 'left',
-                    lineHeight: 'normal', // #427
-                    zIndex: 0, // #1072
-                    '-webkit-tap-highlight-color': 'rgba(0,0,0,0)'
-                }, optionsChart.style);
-
 
                 /**
                  * The containing HTML element of the chart. The container is
@@ -19549,7 +18490,10 @@
 
                 chart.setClassName(optionsChart.className);
 
-                chart.renderer.setStyle(optionsChart.style);
+                // Initialize definitions
+                for (key in options.defs) {
+                    this.renderer.definition(options.defs[key]);
+                }
 
 
                 // Add a reference to the charts index
@@ -19758,12 +18702,6 @@
                 // Resize the container with the global animation applied if enabled
                 // (#2503)
 
-                globalAnimation = renderer.globalAnimation;
-                (globalAnimation ? animate : css)(chart.container, {
-                    width: chart.chartWidth + 'px',
-                    height: chart.chartHeight + 'px'
-                }, globalAnimation);
-
 
                 chart.setChartSize(true);
                 renderer.setSize(chart.chartWidth, chart.chartHeight, animation);
@@ -19958,11 +18896,6 @@
                     plotBorder = chart.plotBorder,
                     chartBorderWidth,
 
-                    plotBGImage = chart.plotBGImage,
-                    chartBackgroundColor = optionsChart.backgroundColor,
-                    plotBackgroundColor = optionsChart.plotBackgroundColor,
-                    plotBackgroundImage = optionsChart.plotBackgroundImage,
-
                     mgn,
                     bgAttr,
                     plotLeft = chart.plotLeft,
@@ -19983,21 +18916,7 @@
                 }
 
 
-                // Presentational
-                chartBorderWidth = optionsChart.borderWidth || 0;
-                mgn = chartBorderWidth + (optionsChart.shadow ? 8 : 0);
-
-                bgAttr = {
-                    fill: chartBackgroundColor || 'none'
-                };
-
-                if (chartBorderWidth || chartBackground['stroke-width']) { // #980
-                    bgAttr.stroke = optionsChart.borderColor;
-                    bgAttr['stroke-width'] = chartBorderWidth;
-                }
-                chartBackground
-                    .attr(bgAttr)
-                    .shadow(optionsChart.shadow);
+                chartBorderWidth = mgn = chartBackground.strokeWidth();
 
                 chartBackground[verb]({
                     x: mgn / 2,
@@ -20017,28 +18936,6 @@
                 }
                 plotBackground[verb](plotBox);
 
-
-                // Presentational attributes for the background
-                plotBackground
-                    .attr({
-                        fill: plotBackgroundColor || 'none'
-                    })
-                    .shadow(optionsChart.plotShadow);
-
-                // Create the background image
-                if (plotBackgroundImage) {
-                    if (!plotBGImage) {
-                        chart.plotBGImage = renderer.image(
-                            plotBackgroundImage,
-                            plotLeft,
-                            plotTop,
-                            plotWidth,
-                            plotHeight
-                        ).add();
-                    } else {
-                        plotBGImage.animate(plotBox);
-                    }
-                }
 
 
                 // Plot clip
@@ -20063,13 +18960,6 @@
                         .add();
                 }
 
-
-                // Presentational
-                plotBorder.attr({
-                    stroke: optionsChart.plotBorderColor,
-                    'stroke-width': optionsChart.plotBorderWidth || 0,
-                    fill: 'none'
-                });
 
 
                 plotBorder[verb](plotBorder.crisp({
@@ -20342,8 +19232,6 @@
                             align: credits.position.align,
                             zIndex: 8
                         })
-
-                        .css(credits.style)
 
                         .add()
                         .align(credits.position);
@@ -20618,21 +19506,9 @@
                 point.series = series;
 
 
-                /**
-                 * The point's current color.
-                 * @name color
-                 * @memberof Highcharts.Point
-                 * @type {Color}
-                 */
-                point.color = series.color; // #3445
-
                 point.applyOptions(options, x);
 
                 if (series.options.colorByPoint) {
-
-                    colors = series.options.colors || series.chart.options.colors;
-                    point.color = point.color || colors[series.colorCounter];
-                    colorCount = colors.length;
 
                     colorIndex = series.colorCounter;
                     series.colorCounter++;
@@ -21095,33 +19971,6 @@
          * @optionparent plotOptions.series
          */
         H.Series = H.seriesType('line', null, { // base series options
-
-            /**
-             * The SVG value used for the `stroke-linecap` and `stroke-linejoin`
-             * of a line graph. Round means that lines are rounded in the ends and
-             * bends.
-             * 
-             * @validvalue ["round", "butt", "square"]
-             * @type {String}
-             * @default round
-             * @since 3.0.7
-             * @apioption plotOptions.line.linecap
-             */
-
-            /**
-             * Pixel with of the graph line.
-             * 
-             * @type {Number}
-             * @see In styled mode, the line stroke-width can be set with the
-             * `.highcharts-graph` class name.
-             * @sample {highcharts} highcharts/plotoptions/series-linewidth-general/
-             *         On all series
-             * @sample {highcharts} highcharts/plotoptions/series-linewidth-specific/
-             *         On one single series
-             * @default 2
-             * @product highcharts highstock
-             */
-            lineWidth: 2,
 
 
             /**
@@ -21979,44 +20828,6 @@
             marker: {
 
 
-
-                /**
-                 * The width of the point marker's outline.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/plotoptions/series-marker-fillcolor/
-                 *         2px blue marker
-                 * @default 0
-                 * @product highcharts highstock
-                 */
-                lineWidth: 0,
-
-
-                /**
-                 * The color of the point marker's outline. When `null`, the series'
-                 * or point's color is used.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/series-marker-fillcolor/
-                 *         Inherit from series color (null)
-                 * @product highcharts highstock
-                 */
-                lineColor: '#ffffff',
-
-                /**
-                 * The fill color of the point marker. When `null`, the series' or
-                 * point's color is used.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/series-marker-fillcolor/
-                 *         White fill
-                 * @default null
-                 * @product highcharts highstock
-                 * @apioption plotOptions.series.marker.fillColor
-                 */
-
-
-
                 /**
                  * Enable or disable the point marker. If `null`, the markers are hidden
                  * when the data is dense, and shown for more widespread data points.
@@ -22191,95 +21002,8 @@
                          * @since 4.0.3
                          * @product highcharts highstock
                          */
-                        radiusPlus: 2,
+                        radiusPlus: 2
 
-
-
-                        /**
-                         * The additional line width for a hovered point.
-                         * 
-                         * @type {Number}
-                         * @sample {highcharts} highcharts/plotoptions/series-states-hover-linewidthplus/ 2 pixels wider on hover
-                         * @sample {highstock} highcharts/plotoptions/series-states-hover-linewidthplus/ 2 pixels wider on hover
-                         * @default 1
-                         * @since 4.0.3
-                         * @product highcharts highstock
-                         */
-                        lineWidthPlus: 1
-
-                    },
-
-
-
-
-                    /**
-                     * The appearance of the point marker when selected. In order to
-                     * allow a point to be selected, set the `series.allowPointSelect`
-                     * option to true.
-                     * 
-                     * @product highcharts highstock
-                     */
-                    select: {
-
-                        /**
-                         * Enable or disable visible feedback for selection.
-                         * 
-                         * @type {Boolean}
-                         * @sample {highcharts} highcharts/plotoptions/series-marker-states-select-enabled/
-                         *         Disabled select state
-                         * @default true
-                         * @product highcharts highstock
-                         * @apioption plotOptions.series.marker.states.select.enabled
-                         */
-
-                        /**
-                         * The fill color of the point marker.
-                         * 
-                         * @type {Color}
-                         * @sample {highcharts} highcharts/plotoptions/series-marker-states-select-fillcolor/
-                         *         Solid red discs for selected points
-                         * @default null
-                         * @product highcharts highstock
-                         */
-                        fillColor: '#cccccc',
-
-
-
-                        /**
-                         * The color of the point marker's outline. When `null`, the series'
-                         * or point's color is used.
-                         * 
-                         * @type {Color}
-                         * @sample {highcharts} highcharts/plotoptions/series-marker-states-select-linecolor/
-                         *         Red line color for selected points
-                         * @default #000000
-                         * @product highcharts highstock
-                         */
-                        lineColor: '#000000',
-
-
-
-                        /**
-                         * The width of the point marker's outline.
-                         * 
-                         * @type {Number}
-                         * @sample {highcharts} highcharts/plotoptions/series-marker-states-select-linewidth/
-                         *         3px line width for selected points
-                         * @default 0
-                         * @product highcharts highstock
-                         */
-                        lineWidth: 2
-
-                        /**
-                         * The radius of the point marker. In hover state, it defaults to the
-                         * normal state's radius + 2.
-                         * 
-                         * @type {Number}
-                         * @sample {highcharts} highcharts/plotoptions/series-marker-states-select-radius/
-                         *         10px radius for selected points
-                         * @product highcharts highstock
-                         * @apioption plotOptions.series.marker.states.select.radius
-                         */
 
                     }
 
@@ -22612,72 +21336,6 @@
                 },
 
 
-
-                /**
-                 * Styles for the label. The default `color` setting is `"contrast"`,
-                 * which is a pseudo color that Highcharts picks up and applies the
-                 * maximum contrast to the underlying point item, for example the
-                 * bar in a bar chart.
-                 * 
-                 * The `textOutline` is a pseudo property that
-                 * applies an outline of the given width with the given color, which
-                 * by default is the maximum contrast to the text. So a bright text
-                 * color will result in a black text outline for maximum readability
-                 * on a mixed background. In some cases, especially with grayscale
-                 * text, the text outline doesn't work well, in which cases it can
-                 * be disabled by setting it to `"none"`. When `useHTML` is true, the
-                 * `textOutline` will not be picked up. In this, case, the same effect
-                 * can be acheived through the `text-shadow` CSS property.
-                 * 
-                 * @type {CSSObject}
-                 * @sample {highcharts} highcharts/plotoptions/series-datalabels-style/
-                 *         Bold labels
-                 * @sample {highmaps} maps/demo/color-axis/ Bold labels
-                 * @default {"color": "contrast", "fontSize": "11px", "fontWeight": "bold", "textOutline": "1px contrast" }
-                 * @since 4.1.0
-                 */
-                style: {
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    color: 'contrast',
-                    textOutline: '1px contrast'
-                },
-
-                /**
-                 * The background color or gradient for the data label.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/series-datalabels-box/ Data labels box options
-                 * @sample {highmaps} maps/plotoptions/series-datalabels-box/ Data labels box options
-                 * @since 2.2.1
-                 * @apioption plotOptions.series.dataLabels.backgroundColor
-                 */
-
-                /**
-                 * The border color for the data label. Defaults to `undefined`.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/series-datalabels-box/ Data labels box options
-                 * @sample {highstock} highcharts/plotoptions/series-datalabels-box/ Data labels box options
-                 * @default undefined
-                 * @since 2.2.1
-                 * @apioption plotOptions.series.dataLabels.borderColor
-                 */
-
-                /**
-                 * The shadow of the box. Works best with `borderWidth` or `backgroundColor`.
-                 * Since 2.3 the shadow can be an object configuration containing `color`,
-                 *  `offsetX`, `offsetY`, `opacity` and `width`.
-                 * 
-                 * @type {Boolean|Object}
-                 * @sample {highcharts} highcharts/plotoptions/series-datalabels-box/ Data labels box options
-                 * @sample {highstock} highcharts/plotoptions/series-datalabels-box/ Data labels box options
-                 * @default false
-                 * @since 2.2.1
-                 * @apioption plotOptions.series.dataLabels.shadow
-                 */
-
-
                 /**
                  * For points with an extent, like columns or map areas, whether to align the data
                  * label inside the box or to the actual value point. Defaults to `false`
@@ -22970,22 +21628,7 @@
                          * @since 4.0
                          * @product highcharts highstock
                          */
-                        size: 10,
-
-
-
-
-                        /**
-                         * Opacity for the halo unless a specific fill is overridden using
-                         * the `attributes` setting. Note that Highcharts is only able to
-                         * apply opacity to colors of hex or rgb(a) formats.
-                         * 
-                         * @type {Number}
-                         * @default 0.25
-                         * @since 4.0
-                         * @product highcharts highstock
-                         */
-                        opacity: 0.25
+                        size: 10
 
                     }
                 },
@@ -23545,19 +22188,13 @@
                         value: options[this.zoneAxis + 'Threshold'] ||
                             options.threshold ||
                             0,
-                        className: 'highcharts-negative',
-
-                        color: options.negativeColor,
-                        fillColor: options.negativeFillColor
+                        className: 'highcharts-negative'
 
                     });
                 }
                 if (zones.length) { // Push one extra zone for the rest
                     if (defined(zones[zones.length - 1].value)) {
                         zones.push({
-
-                            color: this.color,
-                            fillColor: this.fillColor
 
                         });
                     }
@@ -23613,18 +22250,9 @@
              */
 
             getColor: function() {
-                if (this.options.colorByPoint) {
-                    // #4359, selected slice got series.color even when colorByPoint was
-                    // set.
-                    this.options.color = null;
-                } else {
-                    this.getCyclic(
-                        'color',
-                        this.options.color || defaultPlotOptions[this.type].color,
-                        this.chart.options.colors
-                    );
-                }
+                this.getCyclic('color');
             },
+
 
             /**
              * Get the series' symbol based on either the options or pulled from global
@@ -24601,11 +23229,6 @@
                             }
 
 
-                            // Presentational attributes
-                            if (graphic) {
-                                graphic.attr(series.pointAttribs(point, point.selected && 'select'));
-                            }
-
 
                             if (graphic) {
                                 graphic.addClass(point.getClassName(), true);
@@ -24675,66 +23298,6 @@
 
             },
 
-
-            /**
-             * Internal function to get presentational attributes for each point. Unlike
-             * {@link Series#markerAttribs}, this function should return those
-             * attributes that can also be set in CSS. In styled mode, `pointAttribs`
-             * won't be called.
-             *
-             * @param  {Point} point
-             *         The point instance to inspect.
-             * @param  {String} [state]
-             *         The point state, can be either `hover`, `select` or undefined for
-             *         normal state.
-             *
-             * @return {SVGAttributes}
-             *         The presentational attributes to be set on the point.
-             */
-            pointAttribs: function(point, state) {
-                var seriesMarkerOptions = this.options.marker,
-                    seriesStateOptions,
-                    pointOptions = point && point.options,
-                    pointMarkerOptions = (pointOptions && pointOptions.marker) || {},
-                    pointStateOptions,
-                    color = this.color,
-                    pointColorOption = pointOptions && pointOptions.color,
-                    pointColor = point && point.color,
-                    strokeWidth = pick(
-                        pointMarkerOptions.lineWidth,
-                        seriesMarkerOptions.lineWidth
-                    ),
-                    zoneColor = point && point.zone && point.zone.color,
-                    fill,
-                    stroke;
-
-                color = pointColorOption || zoneColor || pointColor || color;
-                fill = pointMarkerOptions.fillColor || seriesMarkerOptions.fillColor || color;
-                stroke = pointMarkerOptions.lineColor || seriesMarkerOptions.lineColor || color;
-
-                // Handle hover and select states
-                if (state) {
-                    seriesStateOptions = seriesMarkerOptions.states[state];
-                    pointStateOptions = (pointMarkerOptions.states && pointMarkerOptions.states[state]) || {};
-                    strokeWidth = pick(
-                        pointStateOptions.lineWidth,
-                        seriesStateOptions.lineWidth,
-                        strokeWidth + pick(
-                            pointStateOptions.lineWidthPlus,
-                            seriesStateOptions.lineWidthPlus,
-                            0
-                        )
-                    );
-                    fill = pointStateOptions.fillColor || seriesStateOptions.fillColor || fill;
-                    stroke = pointStateOptions.lineColor || seriesStateOptions.lineColor || stroke;
-                }
-
-                return {
-                    'stroke': stroke,
-                    'stroke-width': strokeWidth,
-                    'fill': fill
-                };
-            },
 
             /**
              * Clear DOM objects and free up memory.
@@ -24942,10 +23505,7 @@
                     props = [
                         [
                             'graph',
-                            'highcharts-graph',
-
-                            options.lineColor || this.color,
-                            options.dashStyle
+                            'highcharts-graph'
 
                         ]
                     ];
@@ -24954,10 +23514,7 @@
                 each(this.zones, function(zone, i) {
                     props.push([
                         'zone-graph-' + i,
-                        'highcharts-graph highcharts-zone-graph-' + i + ' ' + (zone.className || ''),
-
-                        zone.color || series.color,
-                        zone.dashStyle || options.dashStyle
+                        'highcharts-graph highcharts-zone-graph-' + i + ' ' + (zone.className || '')
 
                     ]);
                 });
@@ -24983,22 +23540,6 @@
                             }) // #1069
                             .add(series.group);
 
-
-                        attribs = {
-                            'stroke': prop[2],
-                            'stroke-width': options.lineWidth,
-                            'fill': (series.fillGraph && series.color) || 'none' // Polygon series use filled graph
-                        };
-
-                        if (prop[3]) {
-                            attribs.dashstyle = prop[3];
-                        } else if (options.linecap !== 'square') {
-                            attribs['stroke-linecap'] = attribs['stroke-linejoin'] = 'round';
-                        }
-
-                        graph = series[graphKey]
-                            .attr(attribs)
-                            .shadow((i < 2) && options.shadow); // add shadow to normal series (0) or to first zone (1) #3932
 
                     }
 
@@ -25088,26 +23629,6 @@
                             }
                         }
 
-
-                        // VML SUPPPORT
-                        if (inverted && renderer.isVML) {
-                            if (axis.isXAxis) {
-                                clipAttr = {
-                                    x: 0,
-                                    y: reversed ? pxPosMin : pxPosMax,
-                                    height: clipAttr.width,
-                                    width: chart.chartWidth
-                                };
-                            } else {
-                                clipAttr = {
-                                    x: clipAttr.y - chart.plotLeft - chart.spacingBox.x,
-                                    y: 0,
-                                    width: clipAttr.height,
-                                    height: chart.chartHeight
-                                };
-                            }
-                        }
-                        // END OF VML SUPPORT
 
 
                         if (clips[i]) {
@@ -26421,25 +24942,6 @@
                 chart.loadingSpan.innerHTML = str || options.lang.loading;
 
 
-                // Update visuals
-                css(loadingDiv, extend(loadingOptions.style, {
-                    zIndex: 10
-                }));
-                css(chart.loadingSpan, loadingOptions.labelStyle);
-
-                // Show it
-                if (!chart.loadingShown) {
-                    css(loadingDiv, {
-                        opacity: 0,
-                        display: ''
-                    });
-                    animate(loadingDiv, {
-                        opacity: loadingOptions.style.opacity || 0.5
-                    }, {
-                        duration: loadingOptions.showDuration || 0
-                    });
-                }
-
 
                 chart.loadingShown = true;
                 setLoadingSize();
@@ -26460,17 +24962,6 @@
 
                 if (loadingDiv) {
                     loadingDiv.className = 'highcharts-loading highcharts-loading-hidden';
-
-                    animate(loadingDiv, {
-                        opacity: 0
-                    }, {
-                        duration: options.loading.hideDuration || 100,
-                        complete: function() {
-                            css(loadingDiv, {
-                                display: 'none'
-                            });
-                        }
-                    });
 
                 }
                 this.loadingShown = false;
@@ -26579,17 +25070,9 @@
                     });
 
 
-                    if ('style' in optionsChart) {
-                        chart.renderer.setStyle(optionsChart.style);
-                    }
-
                 }
 
                 // Moved up, because tooltip needs updated plotOptions (#6218)
-
-                if (options.colors) {
-                    this.options.colors = options.colors;
-                }
 
 
                 if (options.plotOptions) {
@@ -27655,10 +26138,7 @@
                     props = [
                         [
                             'area',
-                            'highcharts-area',
-
-                            this.color,
-                            options.fillColor
+                            'highcharts-area'
 
                         ]
                     ]; // area name, main color, fill color
@@ -27666,10 +26146,7 @@
                 each(zones, function(zone, i) {
                     props.push([
                         'zone-area-' + i,
-                        'highcharts-area highcharts-zone-area-' + i + ' ' + zone.className,
-
-                        zone.color || series.color,
-                        zone.fillColor || options.fillColor
+                        'highcharts-area highcharts-zone-area-' + i + ' ' + zone.className
 
                     ]);
                 });
@@ -27689,11 +26166,6 @@
                         area = series[areaKey] = series.chart.renderer.path(areaPath)
                             .addClass(prop[1])
                             .attr({
-
-                                fill: pick(
-                                    prop[3],
-                                    color(prop[2]).setOpacity(pick(options.fillOpacity, 0.75)).get()
-                                ),
 
                                 zIndex: 0 // #1069
                             }).add(series.group);
@@ -28405,31 +26877,6 @@
                      */
 
 
-
-                    /**
-                     * How much to brighten the point on interaction. Requires the main
-                     * color to be defined in hex or rgb(a) format.
-                     *
-                     * In styled mode, the hover brightening is by default replaced
-                     * with a fill-opacity set in the `.highcharts-point:hover` rule.
-                     *
-                     * @type {Number}
-                     * @sample {highcharts} highcharts/plotoptions/column-states-hover-brightness/
-                     *         Brighten by 0.5
-                     * @default 0.1
-                     * @product highcharts highstock
-                     */
-                    brightness: 0.1,
-
-                    shadow: false
-
-                },
-
-
-                select: {
-                    color: '#cccccc',
-                    borderColor: '#000000',
-                    shadow: false
                 }
 
             },
@@ -28477,23 +26924,7 @@
              * @since 2.0
              * @product highcharts
              */
-            threshold: 0,
-
-
-            /**
-             * The color of the border surrounding each column or bar.
-             *
-             * In styled mode, the border stroke can be set with the `.highcharts-point`
-             * rule.
-             *
-             * @type {Color}
-             * @sample {highcharts} highcharts/plotoptions/column-bordercolor/
-             *         Dark gray border
-             * @default #ffffff
-             * @product highcharts highstock
-             */
-            borderColor: '#ffffff'
-            // borderWidth: 1
+            threshold: 0
 
 
         }, /** @lends seriesTypes.column.prototype */ {
@@ -28778,65 +27209,6 @@
             },
 
 
-            /**
-             * Get presentational attributes
-             */
-            pointAttribs: function(point, state) {
-                var options = this.options,
-                    stateOptions,
-                    ret,
-                    p2o = this.pointAttrToOptions || {},
-                    strokeOption = p2o.stroke || 'borderColor',
-                    strokeWidthOption = p2o['stroke-width'] || 'borderWidth',
-                    fill = (point && point.color) || this.color,
-                    stroke = (point && point[strokeOption]) || options[strokeOption] ||
-                    this.color || fill, // set to fill when borderColor null
-                    strokeWidth = (point && point[strokeWidthOption]) ||
-                    options[strokeWidthOption] || this[strokeWidthOption] || 0,
-                    dashstyle = options.dashStyle,
-                    zone,
-                    brightness;
-
-                // Handle zone colors
-                if (point && this.zones.length) {
-                    zone = point.getZone();
-                    // When zones are present, don't use point.color (#4267). Changed
-                    // order (#6527)
-                    fill = point.options.color || (zone && zone.color) || this.color;
-                }
-
-                // Select or hover states
-                if (state) {
-                    stateOptions = merge(
-                        options.states[state],
-                        // #6401
-                        point.options.states && point.options.states[state] || {}
-                    );
-                    brightness = stateOptions.brightness;
-                    fill = stateOptions.color ||
-                        (
-                            brightness !== undefined &&
-                            color(fill).brighten(stateOptions.brightness).get()
-                        ) ||
-                        fill;
-                    stroke = stateOptions[strokeOption] || stroke;
-                    strokeWidth = stateOptions[strokeWidthOption] || strokeWidth;
-                    dashstyle = stateOptions.dashStyle || dashstyle;
-                }
-
-                ret = {
-                    'fill': fill,
-                    'stroke': stroke,
-                    'stroke-width': strokeWidth
-                };
-
-                if (dashstyle) {
-                    ret.dashstyle = dashstyle;
-                }
-
-                return ret;
-            },
-
 
             /**
              * Draw the columns. For bars, the series.group is rotated, so the same
@@ -28879,18 +27251,6 @@
                             });
                         }
 
-
-                        // Presentational
-                        graphic
-                            .attr(series.pointAttribs(
-                                point,
-                                point.selected && 'select'
-                            ))
-                            .shadow(
-                                options.shadow,
-                                null,
-                                options.stacking && !options.borderRadius
-                            );
 
 
                         graphic.addClass(point.getClassName(), true);
@@ -29241,8 +27601,8 @@
              */
             tooltip: {
 
-                headerFormat: '<span style="color:{point.color}">\u25CF</span> ' +
-                    '<span style="font-size: 0.85em"> {series.name}</span><br/>',
+
+                headerFormat: '<span class="highcharts-color-{point.colorIndex}">\u25CF</span> <span class="highcharts-header"> {series.name}</span><br/>', // eslint-disable-line max-len
 
 
                 pointFormat: 'x: <b>{point.x}</b><br/>y: <b>{point.y}</b><br/>'
@@ -29715,65 +28075,6 @@
 
             tooltip: {
                 followPointer: true
-            },
-
-
-            /**
-             * The color of the border surrounding each slice. When `null`, the
-             * border takes the same color as the slice fill. This can be used
-             * together with a `borderWidth` to fill drawing gaps created by antialiazing
-             * artefacts in borderless pies.
-             * 
-             * In styled mode, the border stroke is given in the `.highcharts-point` class.
-             * 
-             * @type {Color}
-             * @sample {highcharts} highcharts/plotoptions/pie-bordercolor-black/ Black border
-             * @default #ffffff
-             * @product highcharts
-             */
-            borderColor: '#ffffff',
-
-            /**
-             * The width of the border surrounding each slice.
-             * 
-             * When setting the border width to 0, there may be small gaps between
-             * the slices due to SVG antialiasing artefacts. To work around this,
-             * keep the border width at 0.5 or 1, but set the `borderColor` to
-             * `null` instead.
-             * 
-             * In styled mode, the border stroke width is given in the `.highcharts-point` class.
-             * 
-             * @type {Number}
-             * @sample {highcharts} highcharts/plotoptions/pie-borderwidth/ 3px border
-             * @default 1
-             * @product highcharts
-             */
-            borderWidth: 1,
-
-            states: {
-
-                /**
-                 * @extends plotOptions.series.states.hover
-                 * @product highcharts
-                 */
-                hover: {
-
-                    /**
-                     * How much to brighten the point on interaction. Requires the main
-                     * color to be defined in hex or rgb(a) format.
-                     * 
-                     * In styled mode, the hover brightness is by default replaced
-                     * by a fill-opacity given in the `.highcharts-point-hover` class.
-                     * 
-                     * @type {Number}
-                     * @sample {highcharts} highcharts/plotoptions/pie-states-hover-brightness/ Brightened by 0.5
-                     * @default 0.1
-                     * @product highcharts
-                     */
-                    brightness: 0.1,
-
-                    shadow: false
-                }
             }
 
 
@@ -29994,12 +28295,6 @@
                     shapeArgs;
 
 
-                var shadow = series.options.shadow;
-                if (shadow && !series.shadowGroup) {
-                    series.shadowGroup = renderer.g('shadow')
-                        .add(series.group);
-                }
-
 
                 // draw the slices
                 each(series.points, function(point) {
@@ -30013,25 +28308,11 @@
                         groupTranslation = point.getTranslate();
 
 
-                        // Put the shadow behind all points
-                        var shadowGroup = point.shadowGroup;
-                        if (shadow && !shadowGroup) {
-                            shadowGroup = point.shadowGroup = renderer.g('shadow')
-                                .add(series.shadowGroup);
-                        }
-
-                        if (shadowGroup) {
-                            shadowGroup.attr(groupTranslation);
-                        }
-                        pointAttr = series.pointAttribs(point, point.selected && 'select');
-
 
                         // Draw the slice
                         if (graphic) {
                             graphic
                                 .setRadialReference(series.center)
-
-                                .attr(pointAttr)
 
                                 .animate(extend(shapeArgs, groupTranslation));
                         } else {
@@ -30047,13 +28328,6 @@
                                 });
                             }
 
-
-                            graphic
-                                .attr(pointAttr)
-                                .attr({
-                                    'stroke-linejoin': 'round'
-                                })
-                                .shadow(shadow, shadowGroup);
 
                         }
 
@@ -30196,10 +28470,6 @@
 
                 point.graphic.animate(this.getTranslate());
 
-
-                if (point.shadowGroup) {
-                    point.shadowGroup.animate(this.getTranslate());
-                }
 
             },
 
@@ -30561,33 +28831,8 @@
                         style = options.style;
                         rotation = options.rotation;
 
-                        // Determine the color
-                        style.color = pick(
-                            options.color,
-                            style.color,
-                            series.color,
-                            '#000000'
-                        );
-                        // Get automated contrast color
-                        if (style.color === 'contrast') {
-                            point.contrastColor =
-                                renderer.getContrast(point.color || series.color);
-                            style.color = options.inside ||
-                                pick(point.labelDistance, options.distance) < 0 ||
-                                !!seriesOptions.stacking ?
-                                point.contrastColor :
-                                '#000000';
-                        }
-                        if (seriesOptions.cursor) {
-                            style.cursor = seriesOptions.cursor;
-                        }
-
 
                         attr = {
-
-                            fill: options.backgroundColor,
-                            stroke: options.borderColor,
-                            'stroke-width': options.borderWidth,
 
                             r: options.borderRadius || 0,
                             rotation: rotation,
@@ -30634,10 +28879,6 @@
                             attr.text = str;
                         }
                         dataLabel.attr(attr);
-
-                        // Styles must be applied before add in order to read text
-                        // bounding box
-                        dataLabel.css(style).shadow(options.shadow);
 
 
                         if (!dataLabel.added) {
@@ -30695,8 +28936,6 @@
 
             if (visible) {
 
-
-                fontSize = options.style.fontSize;
 
 
                 baseline = chart.renderer.fontMetrics(fontSize, dataLabel).b;
@@ -31138,15 +29377,6 @@
                                             ' highcharts-color-' + point.colorIndex)
                                         .add(series.dataLabelsGroup);
 
-
-                                    connector.attr({
-                                        'stroke-width': connectorWidth,
-                                        'stroke': (
-                                            options.connectorColor ||
-                                            point.color ||
-                                            '#666666'
-                                        )
-                                    });
 
                                 }
                                 connector[isNew ? 'attr' : 'animate']({
@@ -31664,14 +29894,6 @@
                             }
 
 
-                            if (series.options.cursor) {
-                                series[key]
-                                    .css(css)
-                                    .css({
-                                        cursor: series.options.cursor
-                                    });
-                            }
-
                         }
                     });
                     series._hasTracking = true;
@@ -31757,12 +29979,6 @@
                             });
 
 
-                        if (options.cursor) {
-                            tracker.css({
-                                cursor: options.cursor
-                            });
-                        }
-
 
                         if (hasTouch) {
                             tracker.on('touchstart', onMouseOver);
@@ -31809,12 +30025,8 @@
                         boxWrapper.addClass(activeClass);
 
 
-                        legendItem.css(legend.options.itemHoverStyle);
-
                     })
                     .on('mouseout', function() {
-
-                        legendItem.css(merge(item.visible ? legend.itemStyle : legend.itemHiddenStyle));
 
 
                         // A CSS class to dim or hide other than the hovered series
@@ -31870,9 +30082,6 @@
         });
 
 
-
-        // Add pointer cursor to legend itemstyle in defaultOptions
-        defaultOptions.legend.itemStyle.cursor = 'pointer';
 
 
 
@@ -32253,14 +30462,6 @@
                     }
 
 
-                    point.graphic.animate(
-                        series.pointAttribs(point, state),
-                        pick(
-                            chart.options.chart.animation,
-                            stateOptions.animation
-                        )
-                    );
-
 
                     if (markerAttribs) {
                         point.graphic.animate(
@@ -32311,10 +30512,6 @@
                             });
                         }
 
-                        if (stateMarkerGraphic) {
-                            stateMarkerGraphic.attr(series.pointAttribs(point, state));
-                        }
-
                     }
 
                     if (stateMarkerGraphic) {
@@ -32340,12 +30537,6 @@
                     });
                     halo.point = point; // #6055
 
-
-                    halo.attr(extend({
-                        'fill': point.color || series.color,
-                        'fill-opacity': haloOptions.opacity,
-                        'zIndex': -1 // #4929, IE8 added halo above everything
-                    }, haloOptions.attributes));
 
 
                 } else if (halo && halo.point && halo.point.haloPath) {
@@ -32482,35 +30673,6 @@
 
                     series.state = state;
 
-
-
-                    if (stateOptions[state] && stateOptions[state].enabled === false) {
-                        return;
-                    }
-
-                    if (state) {
-                        lineWidth = stateOptions[state].lineWidth || lineWidth + (stateOptions[state].lineWidthPlus || 0); // #4035
-                    }
-
-                    if (graph && !graph.dashstyle) { // hover is turned off for dashed lines in VML
-                        attribs = {
-                            'stroke-width': lineWidth
-                        };
-
-                        // Animate the graph stroke-width. By default a quick animation
-                        // to hover, slower to un-hover.
-                        graph.animate(
-                            attribs,
-                            pick(
-                                series.chart.options.chart.animation,
-                                stateOptions[state] && stateOptions[state].animation
-                            )
-                        );
-                        while (series['zone-graph-' + i]) {
-                            series['zone-graph-' + i].attr(attribs);
-                            i = i + 1;
-                        }
-                    }
 
                 }
             },

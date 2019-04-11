@@ -124,29 +124,6 @@
                 size: true, // to avoid adapting to data label size in Pie.drawDataLabels
 
 
-                // Presentational
-
-                dataLabels: {
-                    connectorWidth: 1
-                },
-
-                /**
-                 * Options for the series states.
-                 *
-                 * @optionparent plotOptions.funnel.states
-                 */
-                states: {
-
-                    /**
-                     * Options for a selected funnel item.
-                     */
-                    select: {
-                        color: '#cccccc',
-                        borderColor: '#000000',
-                        shadow: false
-                    }
-                }
-
             },
 
             // Properties

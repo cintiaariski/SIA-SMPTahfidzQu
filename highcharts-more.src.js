@@ -209,10 +209,6 @@
                     )
                 }).attr({
 
-                    'fill': backgroundOptions.backgroundColor,
-                    'stroke': backgroundOptions.borderColor,
-                    'stroke-width': backgroundOptions.borderWidth,
-
                     'class': 'highcharts-pane ' + (backgroundOptions.className || '')
                 });
 
@@ -307,47 +303,6 @@
                  * @product highcharts
                  */
                 shape: 'circle',
-
-
-                /**
-                 * The pixel border width of the pane background.
-                 * 
-                 * @type {Number}
-                 * @default 1
-                 * @since 2.3.0
-                 * @product highcharts
-                 */
-                borderWidth: 1,
-
-                /**
-                 * The pane background border color.
-                 * 
-                 * @type {Color}
-                 * @default #cccccc
-                 * @since 2.3.0
-                 * @product highcharts
-                 */
-                borderColor: '#cccccc',
-
-                /**
-                 * The background color or gradient for the pane.
-                 * 
-                 * @type {Color}
-                 * @since 2.3.0
-                 * @product highcharts
-                 */
-                backgroundColor: {
-                    linearGradient: {
-                        x1: 0,
-                        y1: 0,
-                        x2: 0,
-                        y2: 1
-                    },
-                    stops: [
-                        [0, '#ffffff'],
-                        [1, '#e6e6e6']
-                    ]
-                },
 
 
                 /** @ignore */
@@ -1031,25 +986,13 @@
 
 
             /**
-             * Pixel width of the arearange graph line.
-             * 
-             * @type {Number}
-             * @default 1
-             * @since 2.3.0
-             * @product highcharts highstock
-             */
-            lineWidth: 1,
-
-
-            /**
              * @default null
              */
             threshold: null,
 
             tooltip: {
 
-
-                pointFormat: '<span style="color:{series.color}">\u25CF</span> {series.name}: <b>{point.low}</b> - <b>{point.high}</b><br/>' // eslint-disable-line no-dupe-keys
+                pointFormat: '<span class="highcharts-color-{series.colorIndex}">\u25CF</span> {series.name}: <b>{point.low}</b> - <b>{point.high}</b><br/>'
 
             },
 
@@ -2063,29 +2006,7 @@
                  * @since 2.1.5
                  * @product highcharts highmaps
                  */
-                zIndex: 2,
-
-                // Presentational
-
-                /**
-                 * The border width in pixels for the gauge data label.
-                 * 
-                 * @type {Number}
-                 * @default 1
-                 * @since 2.3.0
-                 * @product highcharts highmaps
-                 */
-                borderWidth: 1,
-
-                /**
-                 * The border color for the data label.
-                 * 
-                 * @type {Color}
-                 * @default #cccccc
-                 * @since 2.3.0
-                 * @product highcharts highmaps
-                 */
-                borderColor: '#cccccc'
+                zIndex: 2
 
             },
 
@@ -2169,41 +2090,6 @@
 
 
 
-                /**
-                 * The background or fill color of the gauge's dial.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-dial/ Dial options demonstrated
-                 * @default #000000
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.dial.backgroundColor
-                 */
-
-                /**
-                 * The border color or stroke of the gauge's dial. By default, the borderWidth
-                 * is 0, so this must be set in addition to a custom border color.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-dial/ Dial options demonstrated
-                 * @default #cccccc
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.dial.borderColor
-                 */
-
-                /**
-                 * The width of the gauge dial border in pixels.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-dial/ Dial options demonstrated
-                 * @default 0
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.dial.borderWidth
-                 */
-
-
             },
 
             /**
@@ -2245,42 +2131,6 @@
                  * @apioption plotOptions.gauge.pivot.radius
                  */
 
-
-
-                /**
-                 * The border or stroke width of the pivot.
-                 * 
-                 * @type {Number}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-pivot/ Pivot options demonstrated
-                 * @default 0
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.pivot.borderWidth
-                 */
-
-                /**
-                 * The border or stroke color of the pivot. In able to change this,
-                 * the borderWidth must also be set to something other than the default
-                 * 0.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-pivot/ Pivot options demonstrated
-                 * @default #cccccc
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.pivot.borderColor
-                 */
-
-                /**
-                 * The background color or fill of the pivot.
-                 * 
-                 * @type {Color}
-                 * @sample {highcharts} highcharts/plotoptions/gauge-pivot/ Pivot options demonstrated
-                 * @default #000000
-                 * @since 2.3.0
-                 * @product highcharts
-                 * @apioption plotOptions.gauge.pivot.backgroundColor
-                 */
 
             },
 
@@ -2413,13 +2263,6 @@
                             .add(series.group);
 
 
-                        // Presentational attributes
-                        point.graphic.attr({
-                            stroke: dialOptions.borderColor || 'none',
-                            'stroke-width': dialOptions.borderWidth || 0,
-                            fill: dialOptions.backgroundColor || '#000000'
-                        });
-
                     }
                 });
 
@@ -2438,13 +2281,6 @@
                         .translate(center[0], center[1])
                         .add(series.group);
 
-
-                    // Presentational attributes
-                    series.pivot.attr({
-                        'stroke-width': pivotOptions.borderWidth || 0,
-                        stroke: pivotOptions.borderColor || '#cccccc',
-                        fill: pivotOptions.backgroundColor || '#000000'
-                    });
 
                 }
             },
@@ -2611,8 +2447,7 @@
 
             tooltip: {
 
-
-                pointFormat: '<span style="color:{point.color}">\u25CF</span> <b> {series.name}</b><br/>' + // eslint-disable-line no-dupe-keys
+                pointFormat: '<span class="highcharts-color-{point.colorIndex}">\u25CF</span> <b> {series.name}</b><br/>' +
                     'Maximum: {point.high}<br/>' +
                     'Upper quartile: {point.q3}<br/>' +
                     'Median: {point.median}<br/>' +
@@ -2633,173 +2468,7 @@
              * @since 3.0
              * @product highcharts
              */
-            whiskerLength: '50%',
-
-
-            /**
-             * The fill color of the box.
-             * 
-             * @type {Color}
-             * @see In styled mode, the fill color can be set with the
-             * `.highcharts-boxplot-box` class.
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @default #ffffff
-             * @since 3.0
-             * @product highcharts
-             */
-            fillColor: '#ffffff',
-
-            /**
-             * The width of the line surrounding the box. If any of [stemWidth](#plotOptions.
-             * boxplot.stemWidth), [medianWidth](#plotOptions.boxplot.medianWidth)
-             * or [whiskerWidth](#plotOptions.boxplot.whiskerWidth) are `null`,
-             *  the lineWidth also applies to these lines.
-             * 
-             * @type {Number}
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/
-             *         Error bar styling
-             * @default 1
-             * @since 3.0
-             * @product highcharts
-             */
-            lineWidth: 1,
-
-            /**
-             * The color of the median line. If `null`, the general series color
-             * applies.
-             * 
-             * @type {Color}
-             * @see In styled mode, the median stroke width can be set with the
-             * `.highcharts-boxplot-median` class.
-             * 
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/
-             *         Error bar styling
-             * @default null
-             * @since 3.0
-             * @product highcharts
-             * @apioption plotOptions.boxplot.medianColor
-             */
-
-            /**
-             * The pixel width of the median line. If `null`, the [lineWidth](#plotOptions.
-             * boxplot.lineWidth) is used.
-             * 
-             * @type {Number}
-             * @see In styled mode, the median stroke width can be set with the
-             * `.highcharts-boxplot-median` class.
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @default 2
-             * @since 3.0
-             * @product highcharts
-             */
-            medianWidth: 2,
-
-            states: {
-                hover: {
-                    brightness: -0.3
-                }
-            },
-            /**
-             * The color of the stem, the vertical line extending from the box to
-             * the whiskers. If `null`, the series color is used.
-             * 
-             * @type {Color}
-             * @see In styled mode, the stem stroke can be set with the `.highcharts-boxplot-stem` class.
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/
-             *         Error bar styling
-             * @default null
-             * @since 3.0
-             * @product highcharts
-             * @apioption plotOptions.boxplot.stemColor
-             */
-
-            /**
-             * The dash style of the stem, the vertical line extending from the
-             * box to the whiskers.
-             * 
-             * @validvalue ["Solid", "ShortDash", "ShortDot", "ShortDashDot",
-             *         "ShortDashDotDot", "Dot", "Dash" ,"LongDash", "DashDot",
-             *         "LongDashDot", "LongDashDotDot"]
-             * @type {String}
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/
-             *         Error bar styling
-             * @default Solid
-             * @since 3.0
-             * @product highcharts
-             * @apioption plotOptions.boxplot.stemDashStyle
-             */
-
-            /**
-             * The width of the stem, the vertical line extending from the box to
-             * the whiskers. If `null`, the width is inherited from the [lineWidth](#plotOptions.
-             * boxplot.lineWidth) option.
-             * 
-             * @type {Number}
-             * @see In styled mode, the stem stroke width can be set with the `.
-             * highcharts-boxplot-stem` class.
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/
-             *         Error bar styling
-             * @default null
-             * @since 3.0
-             * @product highcharts
-             * @apioption plotOptions.boxplot.stemWidth
-             */
-
-            /**
-             * The color of the whiskers, the horizontal lines marking low and high
-             * values. When `null`, the general series color is used.
-             * 
-             * @type {Color}
-             * @see In styled mode, the whisker stroke can be set with the `.highcharts-boxplot-whisker` class .
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @default null
-             * @since 3.0
-             * @product highcharts
-             * @apioption plotOptions.boxplot.whiskerColor
-             */
-
-            /**
-             * The line width of the whiskers, the horizontal lines marking low
-             * and high values. When `null`, the general [lineWidth](#plotOptions.
-             * boxplot.lineWidth) applies.
-             * 
-             * @type {Number}
-             * @see In styled mode, the whisker stroke width can be set with the
-             * `.highcharts-boxplot-whisker` class.
-             * 
-             * @sample {highcharts} highcharts/plotoptions/box-plot-styling/
-             *         Box plot styling
-             * @sample {highcharts} highcharts/css/boxplot/
-             *         Box plot in styled mode
-             * @since 3.0
-             * @product highcharts
-             */
-            whiskerWidth: 2
+            whiskerLength: '50%'
 
 
         }, /** @lends seriesTypes.boxplot */ {
@@ -2809,20 +2478,6 @@
             },
             pointValKey: 'high', // defines the top of the tracker
 
-
-            /**
-             * Get presentational attributes
-             */
-            pointAttribs: function(point) {
-                var options = this.options,
-                    color = (point && point.color) || this.color;
-
-                return {
-                    'fill': point.fillColor || options.fillColor || color,
-                    'stroke': options.lineColor || color,
-                    'stroke-width': options.lineWidth || 0
-                };
-            },
 
 
             /**
@@ -2884,12 +2539,6 @@
                         shapeArgs = point.shapeArgs; // the box
 
 
-                    var boxAttr,
-                        stemAttr = {},
-                        whiskersAttr = {},
-                        medianAttr = {},
-                        color = point.color || series.color;
-
 
                     if (point.plotY !== undefined) {
 
@@ -2928,32 +2577,6 @@
 
 
 
-
-
-
-                        // Stem attributes
-                        stemAttr.stroke = point.stemColor || options.stemColor || color;
-                        stemAttr['stroke-width'] = pick(point.stemWidth, options.stemWidth, options.lineWidth);
-                        stemAttr.dashstyle = point.stemDashStyle || options.stemDashStyle;
-                        point.stem.attr(stemAttr);
-
-                        // Whiskers attributes
-                        if (whiskerLength) {
-                            whiskersAttr.stroke = point.whiskerColor || options.whiskerColor || color;
-                            whiskersAttr['stroke-width'] = pick(point.whiskerWidth, options.whiskerWidth, options.lineWidth);
-                            point.whiskers.attr(whiskersAttr);
-                        }
-
-                        if (doQuartiles) {
-                            boxAttr = series.pointAttribs(point);
-                            point.box.attr(boxAttr);
-                        }
-
-
-                        // Median attributes
-                        medianAttr.stroke = point.medianColor || options.medianColor || color;
-                        medianAttr['stroke-width'] = pick(point.medianWidth, options.medianWidth, options.lineWidth);
-                        point.medianShape.attr(medianAttr);
 
 
 
@@ -3198,20 +2821,6 @@
         seriesType('errorbar', 'boxplot', {
 
 
-            /**
-             * The main color of the bars. This can be overridden by [stemColor](#plotOptions.
-             * errorbar.stemColor) and [whiskerColor](#plotOptions.errorbar.whiskerColor)
-             * individually.
-             * 
-             * @type {Color}
-             * @sample {highcharts} highcharts/plotoptions/error-bar-styling/ Error bar styling
-             * @default #000000
-             * @since 3.0
-             * @product highcharts
-             */
-            color: '#000000',
-
-
             grouping: false,
 
             /**
@@ -3369,73 +2978,6 @@
             dataLabels: {
                 inside: true
             },
-
-
-            /**
-             * The width of the line connecting waterfall columns.
-             * 
-             * @type {Number}
-             * @default 1
-             * @product highcharts
-             */
-            lineWidth: 1,
-
-            /**
-             * The color of the line that connects columns in a waterfall series.
-             * 
-             * 
-             * In styled mode, the stroke can be set with the `.highcharts-graph` class.
-             * 
-             * @type {Color}
-             * @default #333333
-             * @since 3.0
-             * @product highcharts
-             */
-            lineColor: '#333333',
-
-            /**
-             * A name for the dash style to use for the line connecting the columns
-             * of the waterfall series. Possible values:
-             * 
-             * *   Solid
-             * *   ShortDash
-             * *   ShortDot
-             * *   ShortDashDot
-             * *   ShortDashDotDot
-             * *   Dot
-             * *   Dash
-             * *   LongDash
-             * *   DashDot
-             * *   LongDashDot
-             * *   LongDashDotDot
-             * 
-             * In styled mode, the stroke dash-array can be set with the `.
-             * highcharts-graph` class.
-             * 
-             * @type {String}
-             * @default Dot
-             * @since 3.0
-             * @product highcharts
-             */
-            dashStyle: 'dot',
-
-            /**
-             * The color of the border of each waterfall column.
-             * 
-             * In styled mode, the border stroke can be set with the `.highcharts-point` class.
-             * 
-             * @type {Color}
-             * @default #333333
-             * @since 3.0
-             * @product highcharts
-             */
-            borderColor: '#333333',
-
-            states: {
-                hover: {
-                    lineWidthPlus: 0 // #3126
-                }
-            }
 
 
             /**
@@ -3628,28 +3170,6 @@
                 return pt.y;
             },
 
-
-            /**
-             * Postprocess mapping between options and SVG attributes
-             */
-            pointAttribs: function(point, state) {
-
-                var upColor = this.options.upColor,
-                    attr;
-
-                // Set or reset up color (#3710, update to negative)
-                if (upColor && !point.options.color) {
-                    point.color = point.y > 0 ? upColor : null;
-                }
-
-                attr = seriesTypes.column.prototype.pointAttribs.call(this, point, state);
-
-                // The dashStyle option in waterfall applies to the graph, not
-                // the points
-                delete attr.dashstyle;
-
-                return attr;
-            },
 
 
             /**
@@ -3931,8 +3451,6 @@
             },
             drawGraph: function() {
 
-                this.options.fillColor = this.color; // Hack into the fill logic in area.drawGraph
-
                 seriesTypes.area.prototype.drawGraph.call(this);
             },
             drawLegendSymbol: LegendSymbolMixin.drawRectangle,
@@ -4087,15 +3605,6 @@
              * @product highcharts
              */
             marker: {
-
-                lineColor: null, // inherit from series.color
-                lineWidth: 1,
-                /**
-                 * The fill opacity of the bubble markers.
-                 * @type {Number}
-                 * @default 0.5
-                 * @product highcharts
-                 */
 
                 /**
                  * In bubble charts, the radius is overridden and determined based on 
@@ -4290,18 +3799,6 @@
             zoneAxis: 'z',
             directTouch: true,
 
-
-            pointAttribs: function(point, state) {
-                var markerOptions = this.options.marker,
-                    fillOpacity = pick(markerOptions.fillOpacity, 0.5),
-                    attr = Series.prototype.pointAttribs.call(this, point, state);
-
-                if (fillOpacity !== 1) {
-                    attr.fill = color(attr.fill).setOpacity(fillOpacity).get('rgba');
-                }
-
-                return attr;
-            },
 
 
             /**
